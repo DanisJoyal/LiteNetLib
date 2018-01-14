@@ -45,6 +45,7 @@ namespace LiteNetLib
         public const int DefaultWindowSize = 64;
         public const int SocketBufferSize = 1024 * 1024; //1mb
         public const int SocketTTL = 255;
+        public const int PoolLimit = 1000;
 
         public const ushort MaxSequence = 32768;
         public const ushort HalfMaxSequence = MaxSequence / 2;
