@@ -185,6 +185,11 @@ namespace LibSample
                 StopTime = DateTime.UtcNow;
                 Client.Stop();
             }
+
+            public void OnNetworkReceiveFromChannel(NetPeer peer, NetDataReader reader, DeliveryMethod deliveryMethod, int channel)
+            {
+                
+            }
         }
 
         internal class ServerListener : INetEventListener
@@ -243,6 +248,11 @@ namespace LibSample
             {
                 StopTime = DateTime.UtcNow;
                 Server.Stop();
+            }
+
+            public void OnNetworkReceiveFromChannel(NetPeer peer, NetDataReader reader, DeliveryMethod deliveryMethod, int channel)
+            {
+                
             }
         }
 

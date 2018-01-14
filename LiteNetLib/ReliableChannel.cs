@@ -48,17 +48,19 @@ namespace LiteNetLib
         private readonly bool _ordered;
         private readonly int _windowSize;
         private const int BitsInByte = 8;
+        private readonly int _channel;
 
         public int PacketsInQueue
         {
             get { return _outgoingPackets.Count; }
         }
 
-        public ReliableChannel(NetPeer peer, bool ordered)
+        public ReliableChannel(NetPeer peer, bool ordered, int channel)
         {
             _windowSize = NetConstants.DefaultWindowSize;
             _peer = peer;
             _ordered = ordered;
+            _channel = channel;
 
             _outgoingPackets = new Queue<NetPacket>(_windowSize);
 
@@ -232,7 +234,7 @@ namespace LiteNetLib
             //Init packet
             int bytesCount = (_windowSize - 1) / BitsInByte + 1;
             PacketProperty property = _ordered ? PacketProperty.AckReliableOrdered : PacketProperty.AckReliable;
-            var acksPacket = _peer.GetPacketFromPool(property, bytesCount);
+            var acksPacket = _peer.GetPacketFromPool(property, _channel, bytesCount);
 
             //For quick access
             byte[] data = acksPacket.RawData; //window start + acks size

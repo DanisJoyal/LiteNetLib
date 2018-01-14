@@ -85,6 +85,11 @@ namespace LibSample
             {
 
             }
+
+            public void OnNetworkReceiveFromChannel(NetPeer peer, NetDataReader reader, DeliveryMethod deliveryMethod, int channel)
+            {
+
+            }
         }
 
         private class ServerListener : INetEventListener
@@ -140,6 +145,11 @@ namespace LibSample
                     request.ConnectionId,
                     request.RemoteEndPoint,
                     accepted);
+            }
+
+            public void OnNetworkReceiveFromChannel(NetPeer peer, NetDataReader reader, DeliveryMethod deliveryMethod, int channel)
+            {
+
             }
         }
 

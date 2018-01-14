@@ -12,9 +12,9 @@ namespace LiteNetLib
         private uint _currentUpdateTime;
         private bool _needUpdateFlag;
         private UInt32 _nextUpdateTime;
+        private readonly int _channel;
 
-
-        public KcpChannel(NetPeer peer)
+        public KcpChannel(NetPeer peer, int channel)
         {
             _outgoingPackets = new Queue<NetPacket>();
             _peer = peer;
@@ -24,11 +24,12 @@ namespace LiteNetLib
             _currentUpdateTime = 0;
             _nextUpdateTime = 0;
             _needUpdateFlag = false;
+            _channel = channel;
         }
 
         private void SendKCP(byte[] buf, int size)
         {
-            NetPacket p = _peer.GetPacketFromPool(PacketProperty.KCP, size);
+            NetPacket p = _peer.GetPacketFromPool(PacketProperty.KCP, _channel, size);
             Buffer.BlockCopy(buf, 0, p.RawData, NetPacket.GetHeaderSize(PacketProperty.KCP), size);
             lock (_outgoingPackets)
             {
@@ -59,14 +60,16 @@ namespace LiteNetLib
 
         public void ProcessPacket(NetPacket packet)
         {
-            _kcp.Input(packet.RawData);
+            _kcp.Input(packet.CopyPacketData());
             _needUpdateFlag = true;
 
             for (var size = _kcp.PeekSize(); size > 0; size = _kcp.PeekSize())
             {
-                NetPacket p = _peer.GetPacketFromPool(PacketProperty.KCP, size);
-                if (_kcp.Recv(p.RawData) > 0)
+                byte[] buf = new byte[size];
+                if (_kcp.Recv(buf) > 0)
                 {
+                    NetPacket p = _peer.GetPacketFromPool(PacketProperty.KCP, _channel, size);
+                    Buffer.BlockCopy(buf, 0, p.RawData, NetPacket.GetHeaderSize(PacketProperty.KCP), size);
                     _peer.AddIncomingPacket(p);
                 }
             }

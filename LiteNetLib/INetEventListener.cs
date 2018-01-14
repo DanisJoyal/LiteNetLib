@@ -151,6 +151,15 @@ namespace LiteNetLib
         void OnNetworkReceive(NetPeer peer, NetDataReader reader, DeliveryMethod deliveryMethod);
 
         /// <summary>
+        /// Received some data
+        /// </summary>
+        /// <param name="peer">From peer</param>
+        /// <param name="reader">DataReader containing all received data</param>
+        /// <param name="deliveryMethod">Type of received packet</param>
+        /// <param name="channel">Set the channel wanted. See NetConstants.MultiChannelSize</param>
+        void OnNetworkReceiveFromChannel(NetPeer peer, NetDataReader reader, DeliveryMethod deliveryMethod, int channel);
+
+        /// <summary>
         /// Received unconnected message
         /// </summary>
         /// <param name="remoteEndPoint">From address (IP and Port)</param>
@@ -178,6 +187,7 @@ namespace LiteNetLib
         public delegate void OnPeerDisconnected(NetPeer peer, DisconnectInfo disconnectInfo);
         public delegate void OnNetworkError(NetEndPoint endPoint, int socketErrorCode);
         public delegate void OnNetworkReceive(NetPeer peer, NetDataReader reader, DeliveryMethod deliveryMethod);
+        public delegate void OnNetworkReceiveFromChannel(NetPeer peer, NetDataReader reader, DeliveryMethod deliveryMethod, int channel);
         public delegate void OnNetworkReceiveUnconnected(NetEndPoint remoteEndPoint, NetDataReader reader, UnconnectedMessageType messageType);
         public delegate void OnNetworkLatencyUpdate(NetPeer peer, int latency);
 
@@ -187,6 +197,7 @@ namespace LiteNetLib
         public event OnPeerDisconnected PeerDisconnectedEvent;
         public event OnNetworkError NetworkErrorEvent;
         public event OnNetworkReceive NetworkReceiveEvent;
+        public event OnNetworkReceiveFromChannel NetworkReceiveFromChannelEvent;
         public event OnNetworkReceiveUnconnected NetworkReceiveUnconnectedEvent;
         public event OnNetworkLatencyUpdate NetworkLatencyUpdateEvent;
         public event OnConnectionRequest ConnectionRequestEvent;
@@ -213,6 +224,12 @@ namespace LiteNetLib
         {
             if (NetworkReceiveEvent != null)
                 NetworkReceiveEvent(peer, reader, deliveryMethod);
+        }
+
+        void INetEventListener.OnNetworkReceiveFromChannel(NetPeer peer, NetDataReader reader, DeliveryMethod deliveryMethod, int channel)
+        {
+            if (NetworkReceiveFromChannelEvent != null)
+                NetworkReceiveFromChannelEvent(peer, reader, deliveryMethod, channel);
         }
 
         void INetEventListener.OnNetworkReceiveUnconnected(NetEndPoint remoteEndPoint, NetDataReader reader, UnconnectedMessageType messageType)

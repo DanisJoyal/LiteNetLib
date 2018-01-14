@@ -46,14 +46,16 @@ namespace LiteNetLib
         public const int SocketBufferSize = 1024 * 1024; //1mb
         public const int SocketTTL = 255;
 
-        public const int HeaderSize = 1;
-        public const int SequencedHeaderSize = 3;
-        public const int FragmentHeaderSize = 6;
         public const ushort MaxSequence = 32768;
         public const ushort HalfMaxSequence = MaxSequence / 2;
         public const int MinPacketSize = 576 - MaxUdpHeaderSize;
-        public const int MinPacketDataSize = MinPacketSize - HeaderSize;
-        public const int MinSequencedPacketDataSize = MinPacketSize - SequencedHeaderSize;
+
+        public const int MultiChannelSize = 1;  // Number of bytes
+        public const int HeaderSize = NetPacket.HeaderSize;
+        public const int SequencedHeaderSize = NetPacket.SequencedHeaderSize;
+        public const int FragmentHeaderSize = NetPacket.FragmentHeaderSize;
+        public const int MinPacketDataSize = NetConstants.MinPacketSize - NetPacket.HeaderSize;
+        public const int MinSequencedPacketDataSize = NetConstants.MinPacketSize - SequencedHeaderSize;
 
         //internal
         internal const string MulticastGroupIPv4 = "224.0.0.1";
@@ -63,8 +65,8 @@ namespace LiteNetLib
         internal const int ProtocolId = 2;
         internal const int MaxUdpHeaderSize = 68;
         internal const int PacketSizeLimit = ushort.MaxValue - MaxUdpHeaderSize;
-        internal const int RequestConnectIdIndex = 5;
-        internal const int AcceptConnectIdIndex = 1;
+        internal const int AcceptConnectIdIndex = HeaderSize;
+        internal const int RequestConnectIdIndex = HeaderSize + sizeof(int);
 
         internal static readonly int[] PossibleMtu =
         {

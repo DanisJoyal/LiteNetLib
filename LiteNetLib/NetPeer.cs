@@ -49,12 +49,12 @@ namespace LiteNetLib
         private readonly object _sendLock = new object();
 
         //Channels
-        private readonly ReliableChannel _reliableOrderedChannel;
-        private readonly ReliableChannel _reliableUnorderedChannel;
-        private readonly SequencedChannel _sequencedChannel;
-        private readonly SimpleChannel _simpleChannel;
-        private readonly ReliableSequencedChannel _reliableSequencedChannel;
-        private readonly KcpChannel _kcpChannel;
+        private readonly ReliableChannel[] _reliableOrderedChannels;
+        private readonly ReliableChannel[] _reliableUnorderedChannels;
+        private readonly SequencedChannel[] _sequencedChannels;
+        private readonly SimpleChannel[] _simpleChannels;
+        private readonly ReliableSequencedChannel[] _reliableSequencedChannels;
+        private readonly KcpChannel[] _kcpChannels;
 
         //MTU
         private int _mtu = NetConstants.PossibleMtu[0];
@@ -145,14 +145,14 @@ namespace LiteNetLib
             get { return _netManager; }
         }
 
-        public int PacketsCountInReliableQueue
+        public int PacketsCountInReliableQueue(int channel = 0)
         {
-            get { return _reliableUnorderedChannel.PacketsInQueue; }
+            return getReliableUnorderedChannel(channel).PacketsInQueue;
         }
 
-        public int PacketsCountInReliableOrderedQueue
+        public int PacketsCountInReliableOrderedQueue(int channel = 0)
         {
-            get { return _reliableOrderedChannel.PacketsInQueue; }
+            return getReliableOrderedChannel(channel).PacketsInQueue;
         }
 
         internal double ResendDelay
@@ -170,6 +170,38 @@ namespace LiteNetLib
         /// </summary>
         public readonly NetStatistics Statistics;
 
+        private const int _channelCapacity = NetConstants.MultiChannelSize == 2 ? ushort.MaxValue : NetConstants.MultiChannelSize == 1 ? 256 : 1;
+
+        private ReliableChannel getReliableOrderedChannel(int index)
+        {
+            return _reliableOrderedChannels[index% _channelCapacity] ?? (_reliableOrderedChannels[index % _channelCapacity] = new ReliableChannel(this, true, index % _channelCapacity));
+        }
+
+        private ReliableChannel getReliableUnorderedChannel(int index)
+        {
+            return _reliableUnorderedChannels[index % _channelCapacity] ?? (_reliableUnorderedChannels[index % _channelCapacity] = new ReliableChannel(this, false, index % _channelCapacity));
+        }
+
+        private SequencedChannel getSequencedChannel(int index)
+        {
+            return _sequencedChannels[index % _channelCapacity] ?? (_sequencedChannels[index % _channelCapacity] = new SequencedChannel(this, index % _channelCapacity));
+        }
+
+        private SimpleChannel getSimpleChannel(int index)
+        {
+            return _simpleChannels[index % _channelCapacity] ?? (_simpleChannels[index % _channelCapacity] = new SimpleChannel(this, index % _channelCapacity));
+        }
+
+        private ReliableSequencedChannel getReliableSequencedChannel(int index)
+        {
+            return _reliableSequencedChannels[index % _channelCapacity] ?? (_reliableSequencedChannels[index % _channelCapacity] = new ReliableSequencedChannel(this, index % _channelCapacity));
+        }
+
+        private KcpChannel getKcpChannel(int index)
+        {
+            return _kcpChannels[index % _channelCapacity] ?? (_kcpChannels[index % _channelCapacity] = new KcpChannel(this, index % _channelCapacity));
+        }
+
         private NetPeer(NetManager netManager, NetEndPoint remoteEndPoint)
         {
             Statistics = new NetStatistics();
@@ -181,16 +213,24 @@ namespace LiteNetLib
             _rtt = 0;
             _pingSendTimer = 0;
 
-            _reliableOrderedChannel = new ReliableChannel(this, true);
-            _reliableUnorderedChannel = new ReliableChannel(this, false);
-            _sequencedChannel = new SequencedChannel(this);
-            _simpleChannel = new SimpleChannel(this);
-            _reliableSequencedChannel = new ReliableSequencedChannel(this);
-            _kcpChannel = new KcpChannel(this);
+            _reliableOrderedChannels = new ReliableChannel[_channelCapacity];
+            _reliableUnorderedChannels = new ReliableChannel[_channelCapacity];
+            _sequencedChannels = new SequencedChannel[_channelCapacity];
+            _simpleChannels = new SimpleChannel[_channelCapacity];
+            _reliableSequencedChannels = new ReliableSequencedChannel[_channelCapacity];
+            _kcpChannels = new KcpChannel[_channelCapacity];
+
+            // Initialise default channel
+            getReliableOrderedChannel(0);
+            getReliableUnorderedChannel(0);
+            getSequencedChannel(0);
+            getSimpleChannel(0);
+            getReliableSequencedChannel(0);
+            getKcpChannel(0);
 
             _holdedFragments = new Dictionary<ushort, IncomingFragments>();
 
-            _mergeData = _packetPool.Get(PacketProperty.Merged, NetConstants.MaxPacketSize);
+            _mergeData = _packetPool.Get(PacketProperty.Merged, 0, NetConstants.MaxPacketSize);
         }
 
         //Connect constructor
@@ -217,12 +257,12 @@ namespace LiteNetLib
         private void SendConnectRequest()
         {
             //Make initial packet
-            var connectPacket = _packetPool.Get(PacketProperty.ConnectRequest, 12 + _connectData.Length);
+            var connectPacket = _packetPool.Get(PacketProperty.ConnectRequest, 0, sizeof(int) + sizeof(long) + _connectData.Length);
 
             //Add data
-            FastBitConverter.GetBytes(connectPacket.RawData, 1, NetConstants.ProtocolId);
-            FastBitConverter.GetBytes(connectPacket.RawData, 5, _connectId);
-            Buffer.BlockCopy(_connectData.Data, 0, connectPacket.RawData, 13, _connectData.Length);
+            FastBitConverter.GetBytes(connectPacket.RawData, NetConstants.HeaderSize, NetConstants.ProtocolId);
+            FastBitConverter.GetBytes(connectPacket.RawData, NetConstants.RequestConnectIdIndex, _connectId);
+            Buffer.BlockCopy(_connectData.Data, 0, connectPacket.RawData, NetConstants.RequestConnectIdIndex + sizeof(long), _connectData.Length);
 
             //Send raw
             _netManager.SendRawAndRecycle(connectPacket, _remoteEndPoint);
@@ -234,7 +274,7 @@ namespace LiteNetLib
             _timeSinceLastPacket = 0;
 
             //Make initial packet
-            var connectPacket = _packetPool.Get(PacketProperty.ConnectAccept, 8);
+            var connectPacket = _packetPool.Get(PacketProperty.ConnectAccept, 0, 8);
 
             //Add data
             FastBitConverter.GetBytes(connectPacket.RawData, NetConstants.AcceptConnectIdIndex, _connectId);
@@ -295,9 +335,10 @@ namespace LiteNetLib
         /// </summary>
         /// <param name="data">Data</param>
         /// <param name="options">Send options (reliable, unreliable, etc.)</param>
-        public void Send(byte[] data, DeliveryMethod options)
+        /// <param name="channel">Set the channel wanted. See NetConstants.MultiChannelSize</param>
+        public void Send(byte[] data, DeliveryMethod options, int channel = 0)
         {
-            Send(data, 0, data.Length, options);
+            Send(data, 0, data.Length, options, channel);
         }
 
         /// <summary>
@@ -305,9 +346,10 @@ namespace LiteNetLib
         /// </summary>
         /// <param name="dataWriter">DataWriter with data</param>
         /// <param name="options">Send options (reliable, unreliable, etc.)</param>
-        public void Send(NetDataWriter dataWriter, DeliveryMethod options)
+        /// <param name="channel">Set the channel wanted. See NetConstants.MultiChannelSize</param>
+        public void Send(NetDataWriter dataWriter, DeliveryMethod options, int channel = 0)
         {
-            Send(dataWriter.Data, 0, dataWriter.Length, options);
+            Send(dataWriter.Data, 0, dataWriter.Length, options, channel);
         }
 
         /// <summary>
@@ -317,7 +359,8 @@ namespace LiteNetLib
         /// <param name="start">Start of data</param>
         /// <param name="length">Length of data</param>
         /// <param name="options">Send options (reliable, unreliable, etc.)</param>
-        public void Send(byte[] data, int start, int length, DeliveryMethod options)
+        /// <param name="channel">Set the channel wanted. See NetConstants.MultiChannelSize</param>
+        public void Send(byte[] data, int start, int length, DeliveryMethod options, int channel = 0)
         {
             if (_connectionState == ConnectionState.ShutdownRequested || 
                 _connectionState == ConnectionState.Disconnected)
@@ -337,7 +380,7 @@ namespace LiteNetLib
                 }
                 
                 int packetFullSize = mtu - headerSize;
-                int packetDataSize = packetFullSize - NetConstants.FragmentHeaderSize;
+                int packetDataSize = packetFullSize - NetPacket.FragmentHeaderSize;
 
                 int fullPacketsCount = length / packetDataSize;
                 int lastPacketSize = length % packetDataSize;
@@ -358,13 +401,13 @@ namespace LiteNetLib
                     throw new Exception("Too many fragments: " + totalPackets + " > " + ushort.MaxValue);
                 }
 
-                int dataOffset = headerSize + NetConstants.FragmentHeaderSize;
+                int dataOffset = headerSize + NetPacket.FragmentHeaderSize;
 
                 lock (_sendLock)
                 {
                     for (ushort i = 0; i < fullPacketsCount; i++)
                     {
-                        NetPacket p = _packetPool.Get(property, packetFullSize);
+                        NetPacket p = _packetPool.Get(property, channel, packetFullSize);
                         p.FragmentId = _fragmentId;
                         p.FragmentPart = i;
                         p.FragmentsTotal = (ushort)totalPackets;
@@ -374,7 +417,7 @@ namespace LiteNetLib
                     }
                     if (lastPacketSize > 0)
                     {
-                        NetPacket p = _packetPool.Get(property, lastPacketSize + NetConstants.FragmentHeaderSize);
+                        NetPacket p = _packetPool.Get(property, channel, lastPacketSize + NetPacket.FragmentHeaderSize);
                         p.FragmentId = _fragmentId;
                         p.FragmentPart = (ushort)fullPacketsCount; //last
                         p.FragmentsTotal = (ushort)totalPackets;
@@ -388,13 +431,13 @@ namespace LiteNetLib
             }
 
             //Else just send
-            NetPacket packet = _packetPool.GetWithData(property, data, start, length);
+            NetPacket packet = _packetPool.GetWithData(property, channel, data, start, length);
             SendPacket(packet);
         }
 
         private void CreateAndSend(PacketProperty property, ushort sequence)
         {
-            NetPacket packet = _packetPool.Get(property, 0);
+            NetPacket packet = _packetPool.Get(property, 0, 0);
             packet.Sequence = sequence;
             SendPacket(packet);
         }
@@ -436,8 +479,8 @@ namespace LiteNetLib
                 return false;
             }
 
-            _shutdownPacket = _packetPool.Get(PacketProperty.Disconnect, 8 + length);
-            FastBitConverter.GetBytes(_shutdownPacket.RawData, 1, _connectId);
+            _shutdownPacket = _packetPool.Get(PacketProperty.Disconnect, 0, sizeof(long) + length);
+            FastBitConverter.GetBytes(_shutdownPacket.RawData, NetConstants.HeaderSize, _connectId);
             if (length + 8 >= _mtu)
             {
                 //Drop additional data
@@ -445,7 +488,7 @@ namespace LiteNetLib
             }
             else if (data != null && length > 0)
             {
-                Buffer.BlockCopy(data, start, _shutdownPacket.RawData, 9, length);
+                Buffer.BlockCopy(data, start, _shutdownPacket.RawData, NetConstants.HeaderSize + sizeof(long), length);
             }
             _connectionState = ConnectionState.ShutdownRequested;
             SendRawData(_shutdownPacket);
@@ -459,22 +502,22 @@ namespace LiteNetLib
             switch (packet.Property)
             {
                 case PacketProperty.ReliableUnordered:
-                    _reliableUnorderedChannel.AddToQueue(packet);
+                    getReliableUnorderedChannel(packet.Channel).AddToQueue(packet);
                     break;
                 case PacketProperty.Sequenced:
-                    _sequencedChannel.AddToQueue(packet);
+                    getSequencedChannel(packet.Channel).AddToQueue(packet);
                     break;
                 case PacketProperty.ReliableOrdered:
-                    _reliableOrderedChannel.AddToQueue(packet);
+                    getReliableOrderedChannel(packet.Channel).AddToQueue(packet);
                     break;
                 case PacketProperty.Unreliable:
-                    _simpleChannel.AddToQueue(packet);
+                    getSimpleChannel(packet.Channel).AddToQueue(packet);
                     break;
                 case PacketProperty.ReliableSequenced:
-                    _reliableSequencedChannel.AddToQueue(packet);
+                    getReliableSequencedChannel(packet.Channel).AddToQueue(packet);
                     break;
                 case PacketProperty.KCP:
-                    _kcpChannel.AddToQueue(packet);
+                    getKcpChannel(packet.Channel).AddToQueue(packet);
                     break;
 
                 case PacketProperty.MtuCheck:
@@ -545,7 +588,7 @@ namespace LiteNetLib
                 incomingFragments.ReceivedCount++;
 
                 //Increase total size
-                int dataOffset = p.GetHeaderSize() + NetConstants.FragmentHeaderSize;
+                int dataOffset = p.GetHeaderSize() + NetPacket.FragmentHeaderSize;
                 incomingFragments.TotalSize += p.Size - dataOffset;
 
                 //Check for finish
@@ -555,7 +598,7 @@ namespace LiteNetLib
                 }
 
                 NetUtils.DebugWrite("Received all fragments!");
-                NetPacket resultingPacket = _packetPool.Get( p.Property, incomingFragments.TotalSize );
+                NetPacket resultingPacket = _packetPool.Get( p.Property, 0, incomingFragments.TotalSize );
 
                 int resultingPacketOffset = resultingPacket.GetHeaderSize();
                 int firstFragmentSize = fragments[0].Size - dataOffset;
@@ -604,7 +647,7 @@ namespace LiteNetLib
                 }
                 _mtuCheckAttempts = 0;
                 NetUtils.DebugWrite("MTU check. Resend: " + packet.RawData[1]);
-                var mtuOkPacket = _packetPool.Get(PacketProperty.MtuOk, 1);
+                var mtuOkPacket = _packetPool.Get(PacketProperty.MtuOk, 0, 1);
                 mtuOkPacket.RawData[1] = packet.RawData[1];
                 SendPacket(mtuOkPacket);
             }
@@ -693,34 +736,34 @@ namespace LiteNetLib
 
                 //Process ack
                 case PacketProperty.AckReliable:
-                    _reliableUnorderedChannel.ProcessAck(packet);
+                    getReliableUnorderedChannel(packet.Channel).ProcessAck(packet);
                     _packetPool.Recycle(packet);
                     break;
 
                 case PacketProperty.AckReliableOrdered:
-                    _reliableOrderedChannel.ProcessAck(packet);
+                    getReliableOrderedChannel(packet.Channel).ProcessAck(packet);
                     _packetPool.Recycle(packet);
                     break;
 
                 //Process in order packets
                 case PacketProperty.Sequenced:
-                    _sequencedChannel.ProcessPacket(packet);
+                    getSequencedChannel(packet.Channel).ProcessPacket(packet);
                     break;
 
                 case PacketProperty.ReliableUnordered:
-                    _reliableUnorderedChannel.ProcessPacket(packet);
+                    getReliableUnorderedChannel(packet.Channel).ProcessPacket(packet);
                     break;
 
                 case PacketProperty.ReliableOrdered:
-                    _reliableOrderedChannel.ProcessPacket(packet);
+                    getReliableOrderedChannel(packet.Channel).ProcessPacket(packet);
                     break;
 
                 case PacketProperty.ReliableSequenced:
-                    _reliableSequencedChannel.ProcessPacket(packet);
+                    getReliableSequencedChannel(packet.Channel).ProcessPacket(packet);
                     break;
 
                 case PacketProperty.KCP:
-                    _kcpChannel.ProcessPacket(packet);
+                    getKcpChannel(packet.Channel).ProcessPacket(packet);
                     break;
 
                 //Simple packet without acks
@@ -789,12 +832,12 @@ namespace LiteNetLib
         {
             lock (_flushLock)
             {
-                _reliableOrderedChannel.SendNextPackets();
-                _reliableUnorderedChannel.SendNextPackets();
-                _reliableSequencedChannel.SendNextPackets();
-                _sequencedChannel.SendNextPackets();
-                _kcpChannel.SendNextPackets();
-                _simpleChannel.SendNextPackets();
+                foreach(var channel in _reliableOrderedChannels) channel?.SendNextPackets();
+                foreach (var channel in _reliableUnorderedChannels) channel?.SendNextPackets();
+                foreach (var channel in _reliableSequencedChannels) channel?.SendNextPackets();
+                foreach (var channel in _sequencedChannels) channel?.SendNextPackets();
+                foreach (var channel in _kcpChannels) channel?.SendNextPackets();
+                foreach (var channel in _simpleChannels) channel?.SendNextPackets();
 
                 //If merging enabled
                 if (_mergePos > 0)
@@ -863,9 +906,9 @@ namespace LiteNetLib
             }
 
             //Pending acks
-            _reliableOrderedChannel.SendAcks();
-            _reliableUnorderedChannel.SendAcks();
-            _kcpChannel.Update((uint)deltaTime);
+            foreach (var channel in _reliableOrderedChannels) channel?.SendAcks();
+            foreach (var channel in _reliableUnorderedChannels) channel?.SendAcks();
+            foreach (var channel in _kcpChannels) channel?.Update((uint)deltaTime);
 
             //Send ping
             _pingSendTimer += deltaTime;
@@ -915,7 +958,7 @@ namespace LiteNetLib
                             if (_mtuIdx < NetConstants.PossibleMtu.Length - 1)
                             {
                                 int newMtu = NetConstants.PossibleMtu[_mtuIdx + 1] - NetConstants.HeaderSize;
-                                var p = _packetPool.Get(PacketProperty.MtuCheck, newMtu);
+                                var p = _packetPool.Get(PacketProperty.MtuCheck, 0, newMtu);
                                 p.RawData[1] = (byte)(_mtuIdx + 1);
                                 SendPacket(p);
                             }
@@ -934,9 +977,9 @@ namespace LiteNetLib
             _packetPool.Recycle(packet);
         }
 
-        internal NetPacket GetPacketFromPool(PacketProperty property, int bytesCount)
+        internal NetPacket GetPacketFromPool(PacketProperty property, int channel, int bytesCount)
         {
-            return _packetPool.Get(property, bytesCount);
+            return _packetPool.Get(property, channel, bytesCount);
         }
     }
 }

@@ -6,11 +6,13 @@ namespace LiteNetLib
     {
         private readonly Queue<NetPacket> _outgoingPackets;
         private readonly NetPeer _peer;
+        private readonly int _channel;
 
-        public SimpleChannel(NetPeer peer)
+        public SimpleChannel(NetPeer peer, int channel)
         {
             _outgoingPackets = new Queue<NetPacket>();
             _peer = peer;
+            _channel = channel;
         }
 
         public void AddToQueue(NetPacket packet)
@@ -21,7 +23,7 @@ namespace LiteNetLib
             }
         }
 
-        public bool SendNextPackets()
+        public void SendNextPackets()
         {
             NetPacket packet;
             lock (_outgoingPackets)
@@ -33,7 +35,6 @@ namespace LiteNetLib
                     _peer.Recycle(packet);
                 }
             }
-            return true;
         }
     }
 }

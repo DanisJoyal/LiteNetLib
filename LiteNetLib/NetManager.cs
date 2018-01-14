@@ -40,6 +40,7 @@ namespace LiteNetLib
             public DisconnectReason DisconnectReason;
             public ConnectionRequest ConnectionRequest;
             public DeliveryMethod DeliveryMethod;
+            public int Channel;
         }
 
 #if DEBUG
@@ -350,7 +351,10 @@ namespace LiteNetLib
                     _netEventListener.OnPeerDisconnected(evt.Peer, info);
                     break;
                 case NetEventType.Receive:
-                    _netEventListener.OnNetworkReceive(evt.Peer, evt.DataReader, evt.DeliveryMethod);
+                    // Keep backward compatibility
+                    if (evt.Channel == 0)
+                        _netEventListener.OnNetworkReceive(evt.Peer, evt.DataReader, evt.DeliveryMethod);
+                    _netEventListener.OnNetworkReceiveFromChannel(evt.Peer, evt.DataReader, evt.DeliveryMethod, evt.Channel);
                     break;
                 case NetEventType.ReceiveUnconnected:
                     _netEventListener.OnNetworkReceiveUnconnected(evt.RemoteEndPoint, evt.DataReader, UnconnectedMessageType.BasicMessage);
@@ -602,7 +606,7 @@ namespace LiteNetLib
                         if (netPeer.ConnectionState == ConnectionState.InProgress ||
                             netPeer.ConnectionState == ConnectionState.Connected)
                         {
-                            if (BitConverter.ToInt64(packet.RawData, 1) != netPeer.ConnectId)
+                            if (BitConverter.ToInt64(packet.RawData, NetConstants.HeaderSize) != netPeer.ConnectId)
                             {
                                 //Old or incorrect disconnect
                                 NetPacketPool.Recycle(packet);
@@ -611,7 +615,7 @@ namespace LiteNetLib
 
                             var netEvent = CreateEvent(NetEventType.Disconnect);
                             netEvent.Peer = netPeer;
-                            netEvent.DataReader.SetSource(packet.RawData, 9, packet.Size);
+                            netEvent.DataReader.SetSource(packet.RawData, NetConstants.HeaderSize + sizeof(long), packet.Size);
                             netEvent.DisconnectReason = DisconnectReason.RemoteConnectionClose;
                             EnqueueEvent(netEvent);
                         }
@@ -657,7 +661,7 @@ namespace LiteNetLib
                         return;
                     if (peersCount < _maxConnections)
                     {
-                        int protoId = BitConverter.ToInt32(packet.RawData, 1);
+                        int protoId = BitConverter.ToInt32(packet.RawData, NetConstants.HeaderSize);
                         if (protoId != NetConstants.ProtocolId)
                         {
                             NetUtils.DebugWrite(ConsoleColor.Cyan,
@@ -666,13 +670,13 @@ namespace LiteNetLib
                         }
 
                         //Getting new id for peer
-                        long connectionId = BitConverter.ToInt64(packet.RawData, 5);
+                        long connectionId = BitConverter.ToInt64(packet.RawData, NetConstants.RequestConnectIdIndex);
 
                         // Read data and create request
                         var reader = new NetDataReader(null, 0, 0);
                         if (packet.Size > 12)
                         {
-                            reader.SetSource(packet.RawData, 13, packet.Size);
+                            reader.SetSource(packet.RawData, NetConstants.RequestConnectIdIndex + sizeof(long), packet.Size);
                         }
 
                         _connectingPeers.Add(remoteEndPoint);
@@ -698,6 +702,7 @@ namespace LiteNetLib
                 var netEvent = CreateEvent(NetEventType.Receive);
                 netEvent.Peer = fromPeer;
                 netEvent.RemoteEndPoint = fromPeer.EndPoint;
+                netEvent.Channel = packet.Channel;
                 switch (packet.Property)
                 {
                     case PacketProperty.Unreliable:
@@ -729,9 +734,10 @@ namespace LiteNetLib
         /// </summary>
         /// <param name="writer">DataWriter with data</param>
         /// <param name="options">Send options (reliable, unreliable, etc.)</param>
-        public void SendToAll(NetDataWriter writer, DeliveryMethod options)
+        /// <param name="channel">Set the channel wanted. See NetConstants.MultiChannelSize</param>
+        public void SendToAll(NetDataWriter writer, DeliveryMethod options, int channel = 0)
         {
-            SendToAll(writer.Data, 0, writer.Length, options);
+            SendToAll(writer.Data, 0, writer.Length, options, channel);
         }
 
         /// <summary>
@@ -739,9 +745,10 @@ namespace LiteNetLib
         /// </summary>
         /// <param name="data">Data</param>
         /// <param name="options">Send options (reliable, unreliable, etc.)</param>
-        public void SendToAll(byte[] data, DeliveryMethod options)
+        /// <param name="channel">Set the channel wanted. See NetConstants.MultiChannelSize</param>
+        public void SendToAll(byte[] data, DeliveryMethod options, int channel = 0)
         {
-            SendToAll(data, 0, data.Length, options);
+            SendToAll(data, 0, data.Length, options, channel);
         }
 
         /// <summary>
@@ -751,13 +758,14 @@ namespace LiteNetLib
         /// <param name="start">Start of data</param>
         /// <param name="length">Length of data</param>
         /// <param name="options">Send options (reliable, unreliable, etc.)</param>
-        public void SendToAll(byte[] data, int start, int length, DeliveryMethod options)
+        /// <param name="channel">Set the channel wanted. See NetConstants.MultiChannelSize</param>
+        public void SendToAll(byte[] data, int start, int length, DeliveryMethod options, int channel = 0)
         {
             lock (_peers)
             {
                 for(int i = 0; i < _peers.Count; i++)
                 {
-                    _peers[i].Send(data, start, length, options);
+                    _peers[i].Send(data, start, length, options, channel);
                 }
             }
         }
@@ -768,9 +776,10 @@ namespace LiteNetLib
         /// <param name="writer">DataWriter with data</param>
         /// <param name="options">Send options (reliable, unreliable, etc.)</param>
         /// <param name="excludePeer">Excluded peer</param>
-        public void SendToAll(NetDataWriter writer, DeliveryMethod options, NetPeer excludePeer)
+        /// <param name="channel">Set the channel wanted. See NetConstants.MultiChannelSize</param>
+        public void SendToAll(NetDataWriter writer, DeliveryMethod options, NetPeer excludePeer, int channel = 0)
         {
-            SendToAll(writer.Data, 0, writer.Length, options, excludePeer);
+            SendToAll(writer.Data, 0, writer.Length, options, excludePeer, channel);
         }
 
         /// <summary>
@@ -779,9 +788,10 @@ namespace LiteNetLib
         /// <param name="data">Data</param>
         /// <param name="options">Send options (reliable, unreliable, etc.)</param>
         /// <param name="excludePeer">Excluded peer</param>
-        public void SendToAll(byte[] data, DeliveryMethod options, NetPeer excludePeer)
+        /// <param name="channel">Set the channel wanted. See NetConstants.MultiChannelSize</param>
+        public void SendToAll(byte[] data, DeliveryMethod options, NetPeer excludePeer, int channel = 0)
         {
-            SendToAll(data, 0, data.Length, options, excludePeer);
+            SendToAll(data, 0, data.Length, options, excludePeer, channel);
         }
 
         /// <summary>
@@ -792,7 +802,8 @@ namespace LiteNetLib
         /// <param name="length">Length of data</param>
         /// <param name="options">Send options (reliable, unreliable, etc.)</param>
         /// <param name="excludePeer">Excluded peer</param>
-        public void SendToAll(byte[] data, int start, int length, DeliveryMethod options, NetPeer excludePeer)
+        /// <param name="channel">Set the channel wanted. See NetConstants.MultiChannelSize</param>
+        public void SendToAll(byte[] data, int start, int length, DeliveryMethod options, NetPeer excludePeer, int channel = 0)
         {
             lock (_peers)
             {
@@ -801,7 +812,7 @@ namespace LiteNetLib
                     var netPeer = _peers[i];
                     if (netPeer != excludePeer)
                     {
-                        netPeer.Send(data, start, length, options);
+                        netPeer.Send(data, start, length, options, channel);
                     }
                 }
             }
@@ -889,7 +900,7 @@ namespace LiteNetLib
         {
             if (!IsRunning)
                 return false;
-            var packet = NetPacketPool.GetWithData(PacketProperty.UnconnectedMessage, message, start, length);
+            var packet = NetPacketPool.GetWithData(PacketProperty.UnconnectedMessage, 0, message, start, length);
             bool result = SendRawAndRecycle(packet, remoteEndPoint);
             return result;
         }
@@ -908,7 +919,7 @@ namespace LiteNetLib
         {
             if (!IsRunning)
                 return false;
-            var packet = NetPacketPool.GetWithData(PacketProperty.DiscoveryRequest, data, start, length);
+            var packet = NetPacketPool.GetWithData(PacketProperty.DiscoveryRequest, 0, data, start, length);
             bool result = _socket.SendBroadcast(packet.RawData, 0, packet.Size, port);
             NetPacketPool.Recycle(packet);
             return result;
@@ -928,7 +939,7 @@ namespace LiteNetLib
         {
             if (!IsRunning)
                 return false;
-            var packet = NetPacketPool.GetWithData(PacketProperty.DiscoveryResponse, data, start, length);
+            var packet = NetPacketPool.GetWithData(PacketProperty.DiscoveryResponse, 0, data, start, length);
             bool result = SendRawAndRecycle(packet, remoteEndPoint);
             return result;
         }

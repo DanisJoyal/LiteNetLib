@@ -8,11 +8,13 @@ namespace LiteNetLib
         private int _remoteSequence;
         private readonly Queue<NetPacket> _outgoingPackets;
         private readonly NetPeer _peer;
+        private readonly int _channel;
 
-        public SequencedChannel(NetPeer peer)
+        public SequencedChannel(NetPeer peer, int channel)
         {
             _outgoingPackets = new Queue<NetPacket>();
             _peer = peer;
+            _channel = channel;
         }
 
         public void AddToQueue(NetPacket packet)

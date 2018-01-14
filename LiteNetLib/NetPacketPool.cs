@@ -14,16 +14,16 @@ namespace LiteNetLib
             _pool = new Stack<NetPacket>();
         }
 
-        public NetPacket GetWithData(PacketProperty property, NetDataWriter writer)
+        public NetPacket GetWithData(PacketProperty property, int channel, NetDataWriter writer)
         {
-            var packet = Get(property, writer.Length);
+            var packet = Get(property, writer.Length, channel);
             Buffer.BlockCopy(writer.Data, 0, packet.RawData, NetPacket.GetHeaderSize(property), writer.Length);
             return packet;
         }
 
-        public NetPacket GetWithData(PacketProperty property, byte[] data, int start, int length)
+        public NetPacket GetWithData(PacketProperty property, int channel, byte[] data, int start, int length)
         {
-            var packet = Get(property, length);
+            var packet = Get(property, channel, length);
             Buffer.BlockCopy(data, start, packet.RawData, NetPacket.GetHeaderSize(property), length);
             return packet;
         }
@@ -71,11 +71,12 @@ namespace LiteNetLib
         }
 
         //Get packet with size
-        public NetPacket Get(PacketProperty property, int size)
+        public NetPacket Get(PacketProperty property, int channel, int size)
         {
             size += NetPacket.GetHeaderSize(property);
             NetPacket packet = GetPacket(size, true);
             packet.Property = property;
+            packet.Channel = channel;
             packet.Size = size;
             return packet;
         }

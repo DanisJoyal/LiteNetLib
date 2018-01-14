@@ -2,7 +2,7 @@
 {
     internal sealed class ReliableSequencedChannel
     {
-        public ReliableSequencedChannel(NetPeer peer)
+        public ReliableSequencedChannel(NetPeer peer, int channel)
         {
 
         }

@@ -49,6 +49,11 @@ namespace LibSample
             {
                 request.AcceptIfKey("key");
             }
+
+            public void OnNetworkReceiveFromChannel(NetPeer peer, NetDataReader reader, DeliveryMethod deliveryMethod, int channel)
+            {
+                
+            }
         }
 
         private class ServerListener : INetEventListener
@@ -94,6 +99,11 @@ namespace LibSample
             }
 
             public void OnConnectionRequest(ConnectionRequest request)
+            {
+                
+            }
+
+            public void OnNetworkReceiveFromChannel(NetPeer peer, NetDataReader reader, DeliveryMethod deliveryMethod, int channel)
             {
                 
             }

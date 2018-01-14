@@ -68,6 +68,11 @@ namespace LibSample
             void INetEventListener.OnPeerDisconnected(NetPeer peer, DisconnectInfo disconnectInfo)
             {
             }
+
+            public void OnNetworkReceiveFromChannel(NetPeer peer, NetDataReader reader, DeliveryMethod deliveryMethod, int channel)
+            {
+                
+            }
         }
 
         public class Client : INetEventListener
@@ -151,6 +156,11 @@ namespace LibSample
 
             void INetEventListener.OnPeerDisconnected(NetPeer peer, DisconnectInfo disconnectInfo)
             {
+            }
+
+            public void OnNetworkReceiveFromChannel(NetPeer peer, NetDataReader reader, DeliveryMethod deliveryMethod, int channel)
+            {
+                
             }
         }
         private const string DATA = "The quick brown fox jumps over the lazy dog";

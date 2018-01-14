@@ -1,5 +1,9 @@
 using System;
+using System.Diagnostics;
 using LiteNetLib.Utils;
+
+// fix the "Unreachable code detected" did by if(NetConstants.MultiChannelSize == 2)
+#pragma warning disable 0162
 
 namespace LiteNetLib
 {
@@ -34,17 +38,50 @@ namespace LiteNetLib
     {
         private const int LastProperty = 22;
 
+        public const int HeaderSize = 1 + NetConstants.MultiChannelSize;
+        public const int SequencedHeaderSize = HeaderSize + _SequenceSize;
+        public const int FragmentHeaderSize = _FragmentIdSize + _FragmentPartSize + _FragmentTotalSize;
+
         //Header
+        private const int _PropertySize = 1;
         public PacketProperty Property
         {
             get { return (PacketProperty)(RawData[0] & 0x7F); }
-            set { RawData[0] = (byte)((RawData[0] & 0x80) | ((byte)value & 0x7F)); }
+            set
+            {
+                RawData[0] = (byte)((RawData[0] & 0x80) | ((byte)value & 0x7F));
+#if DEBUG_MESSAGES
+                // Debug purpose: Avoid mismatch between client and server. Can be removed.
+                RawData[0] |= (byte)(NetConstants.MultiChannelSize << 5);
+#endif
+            }
         }
+
+        private const int _SequenceSize = 2;
 
         public ushort Sequence
         {
-            get { return BitConverter.ToUInt16(RawData, 1); }
-            set { FastBitConverter.GetBytes(RawData, 1, value); }
+            get { return BitConverter.ToUInt16(RawData, HeaderSize); }
+            set { FastBitConverter.GetBytes(RawData, HeaderSize, value); }
+        }
+
+        public int Channel
+        {
+            get
+            {
+                if (NetConstants.MultiChannelSize == 1)
+                    return (int)RawData[_PropertySize];
+                if (NetConstants.MultiChannelSize == 2)
+                    return (int)BitConverter.ToUInt16(RawData, _PropertySize);
+                return 0;
+            }
+            set
+            {
+                if (NetConstants.MultiChannelSize == 1)
+                    RawData[_PropertySize] = (byte)value;
+                if (NetConstants.MultiChannelSize == 2)
+                    FastBitConverter.GetBytes(RawData, _PropertySize, (ushort)value);
+            }
         }
 
         public bool IsFragmented
@@ -59,22 +96,25 @@ namespace LiteNetLib
             }
         }
 
+        private const int _FragmentIdSize = 2;
         public ushort FragmentId
         {
-            get { return BitConverter.ToUInt16(RawData, 3); }
-            set { FastBitConverter.GetBytes(RawData, 3, value); }
+            get { return BitConverter.ToUInt16(RawData, SequencedHeaderSize); }
+            set { FastBitConverter.GetBytes(RawData, SequencedHeaderSize, value); }
         }
 
+        private const int _FragmentPartSize = 2;
         public ushort FragmentPart
         {
-            get { return BitConverter.ToUInt16(RawData, 5); }
-            set { FastBitConverter.GetBytes(RawData, 5, value); }
+            get { return BitConverter.ToUInt16(RawData, SequencedHeaderSize + _FragmentIdSize); }
+            set { FastBitConverter.GetBytes(RawData, SequencedHeaderSize + _FragmentIdSize, value); }
         }
 
+        private const int _FragmentTotalSize = 2;
         public ushort FragmentsTotal
         {
-            get { return BitConverter.ToUInt16(RawData, 7); }
-            set { FastBitConverter.GetBytes(RawData, 7, value); }
+            get { return BitConverter.ToUInt16(RawData, SequencedHeaderSize + _FragmentIdSize + _FragmentPartSize); }
+            set { FastBitConverter.GetBytes(RawData, SequencedHeaderSize + _FragmentIdSize + _FragmentPartSize, value); }
         }
 
         //Data
@@ -109,9 +149,9 @@ namespace LiteNetLib
                 case PacketProperty.AckReliable:
                 case PacketProperty.AckReliableOrdered:
                 case PacketProperty.ReliableSequenced:
-                    return NetConstants.SequencedHeaderSize;
+                    return NetPacket.SequencedHeaderSize;
                 default:
-                    return NetConstants.HeaderSize;
+                    return NetPacket.HeaderSize;
             }
         }
 
@@ -137,10 +177,19 @@ namespace LiteNetLib
             bool fragmented = (data[start] & 0x80) != 0;
             int headerSize = GetHeaderSize((PacketProperty) property);
 
+#if DEBUG_MESSAGES
+            // Debug purpose: Avoid mismatch between client and server. Can be removed.
+            int multichannel = ((RawData[0] >> 5) & 0x03);
+            if(multichannel != NetConstants.MultiChannelSize)
+            {
+                NetUtils.DebugWrite("[PA]Invalid multichannel size");
+            }
+#endif
+
             if (property > LastProperty ||
                 packetSize > NetConstants.PacketSizeLimit ||
                 packetSize < headerSize ||
-                fragmented && packetSize < headerSize + NetConstants.FragmentHeaderSize)
+                fragmented && packetSize < headerSize + NetPacket.FragmentHeaderSize)
             {
                 return false;
             }
