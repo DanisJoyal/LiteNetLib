@@ -46,10 +46,10 @@ namespace LiteNetLib
         private const int _PropertySize = 1;
         public PacketProperty Property
         {
-            get { return (PacketProperty)(RawData[0] & 0x7F); }
+            get { return (PacketProperty)(RawData[0] & 0x1F); }
             set
             {
-                RawData[0] = (byte)((RawData[0] & 0x80) | ((byte)value & 0x7F));
+                RawData[0] = (byte)((RawData[0] & 0x80) | ((byte)value & 0x1F));
 #if DEBUG_MESSAGES
                 // Debug purpose: Avoid mismatch between client and server. Can be removed.
                 RawData[0] |= (byte)(NetConstants.MultiChannelSize << 5);
@@ -173,13 +173,13 @@ namespace LiteNetLib
         public bool FromBytes(byte[] data, int start, int packetSize)
         {
             //Reading property
-            byte property = (byte)(data[start] & 0x7F);
+            byte property = (byte)(data[start] & 0x1F);
             bool fragmented = (data[start] & 0x80) != 0;
             int headerSize = GetHeaderSize((PacketProperty) property);
 
 #if DEBUG_MESSAGES
             // Debug purpose: Avoid mismatch between client and server. Can be removed.
-            int multichannel = ((RawData[0] >> 5) & 0x03);
+            int multichannel = ((data[start] >> 5) & 0x03);
             if(multichannel != NetConstants.MultiChannelSize)
             {
                 NetUtils.DebugWrite("[PA]Invalid multichannel size");
