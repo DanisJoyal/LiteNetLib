@@ -23,8 +23,9 @@ namespace LiteNetLib
             }
         }
 
-        public void SendNextPackets()
+        public bool SendNextPackets()
         {
+            bool packetHasBeenSent = false;
             NetPacket packet;
             lock (_outgoingPackets)
             {
@@ -33,8 +34,10 @@ namespace LiteNetLib
                     packet = _outgoingPackets.Dequeue();
                     _peer.SendRawData(packet);
                     _peer.Recycle(packet);
+                    packetHasBeenSent = true;
                 }
             }
+            return packetHasBeenSent;
         }
     }
 }

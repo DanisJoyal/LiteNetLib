@@ -167,7 +167,7 @@ namespace LiteNetLib
             Monitor.Exit(_outgoingPackets);
         }
 
-        public void SendNextPackets()
+        public bool SendNextPackets()
         {
             //check sending acks
             DateTime currentTime = DateTime.UtcNow;
@@ -201,7 +201,7 @@ namespace LiteNetLib
             if (_headPendingPacket == null)
             {
                 Monitor.Exit(_pendingPackets);
-                return;
+                return false;
             }
             //send
             PendingPacket currentPacket = _headPendingPacket;  
@@ -221,12 +221,13 @@ namespace LiteNetLib
                 _peer.SendRawData(currentPacket.Packet);
             } while ((currentPacket = currentPacket.Prev) != null);
             Monitor.Exit(_pendingPackets);
+            return true;
         }
 
-        public void SendAcks()
+        public bool SendAcks()
         {
             if (!_mustSendAcks)
-                return;
+                return false;
             _mustSendAcks = false;
 
             NetUtils.DebugWrite("[RR]SendAcks");
@@ -267,6 +268,7 @@ namespace LiteNetLib
 
             _peer.SendRawData(acksPacket);
             _peer.Recycle(acksPacket);
+            return true;
         }
 
         //Process incoming packet

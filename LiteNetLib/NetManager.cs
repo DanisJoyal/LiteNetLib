@@ -82,7 +82,7 @@ namespace LiteNetLib
         /// <summary>
         /// Library logic update and send period in milliseconds
         /// </summary>
-        public int UpdateTime = DefaultUpdateTime;
+        public int UpdateTime = NetConstants.DefaultUpdateTime;
 
         /// <summary>
         /// Interval for latency detection and checking connection
@@ -149,8 +149,6 @@ namespace LiteNetLib
         /// Enables socket option "ReuseAddress" for specific purposes
         /// </summary>
         public bool ReuseAddress = false;
-
-        private const int DefaultUpdateTime = 15;
 
         /// <summary>
         /// Statistics of all connections
@@ -392,6 +390,7 @@ namespace LiteNetLib
         //Update function
         private void UpdateLogic()
         {
+            int _nextUpdateTime = UpdateTime;
             while (IsRunning)
             {
 #if DEBUG
@@ -417,6 +416,7 @@ namespace LiteNetLib
 #if STATS_ENABLED
                 ulong totalPacketLoss = 0;
 #endif
+                int sleepTime = UpdateTime;
                 //Process acks
                 lock (_peers)
                 {
@@ -430,7 +430,7 @@ namespace LiteNetLib
                         }
                         else
                         {
-                            netPeer.Update(UpdateTime);
+                            sleepTime = Math.Min(sleepTime, netPeer.Update(_nextUpdateTime));
 #if STATS_ENABLED
                             totalPacketLoss += netPeer.Statistics.PacketLoss;
 #endif
@@ -441,7 +441,9 @@ namespace LiteNetLib
 #if STATS_ENABLED
                 Statistics.PacketLoss = totalPacketLoss;
 #endif
-                Thread.Sleep(UpdateTime);
+                if(sleepTime > 0)
+                    Thread.Sleep(sleepTime);
+                _nextUpdateTime = sleepTime;
             }
         }
         

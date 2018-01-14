@@ -47,7 +47,7 @@ namespace LiteNetLib
                 NetUtils.DebugWrite("[KCP] Packet buffer is invalid.");
         }
 
-        public void Update(uint dt)
+        public int Update(uint dt)
         {
             _currentUpdateTime += dt;
             if (_needUpdateFlag || _currentUpdateTime >= _nextUpdateTime)
@@ -56,6 +56,7 @@ namespace LiteNetLib
                 _nextUpdateTime = _kcp.Check(_currentUpdateTime);
                 _needUpdateFlag = false;
             }
+            return (int)_nextUpdateTime - (int)_currentUpdateTime;
         }
 
         public void ProcessPacket(NetPacket packet)
@@ -75,8 +76,9 @@ namespace LiteNetLib
             }
         }
 
-        public void SendNextPackets()
+        public bool SendNextPackets()
         {
+            bool packetHasBeenSent = false;
             NetPacket packet;
             lock (_outgoingPackets)
             {
@@ -85,8 +87,10 @@ namespace LiteNetLib
                     packet = _outgoingPackets.Dequeue();
                     _peer.SendRawData(packet);
                     _peer.Recycle(packet);
+                    packetHasBeenSent = true;
                 }
             }
+            return packetHasBeenSent;
         }
     }
 }

@@ -25,8 +25,9 @@ namespace LiteNetLib
             }
         }
 
-        public void SendNextPackets()
+        public bool SendNextPackets()
         {
+            bool packetHasBeenSent = false;
             lock (_outgoingPackets)
             {
                 while (_outgoingPackets.Count > 0)
@@ -36,8 +37,10 @@ namespace LiteNetLib
                     packet.Sequence = (ushort)_localSequence;
                     _peer.SendRawData(packet);
                     _peer.Recycle(packet);
+                    packetHasBeenSent = true;
                 }
             }
+            return packetHasBeenSent;
         }
 
         public void ProcessPacket(NetPacket packet)
