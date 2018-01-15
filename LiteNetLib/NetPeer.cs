@@ -199,7 +199,7 @@ namespace LiteNetLib
 
         private KcpChannel getKcpChannel(int index)
         {
-            return _kcpChannels[index % _channelCapacity] ?? (_kcpChannels[index % _channelCapacity] = new KcpChannel(this, index % _channelCapacity));
+            return _kcpChannels[index % _channelCapacity] ?? (_kcpChannels[index % _channelCapacity] = new KcpChannel(this, index % _channelCapacity, NetManager.UpdateTime, NetConstants.DefaultWindowSize));
         }
 
         private NetPeer(NetManager netManager, NetEndPoint remoteEndPoint)

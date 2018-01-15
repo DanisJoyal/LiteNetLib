@@ -14,13 +14,14 @@ namespace LiteNetLib
         private UInt32 _nextUpdateTime;
         private readonly int _channel;
 
-        public KcpChannel(NetPeer peer, int channel)
+        public KcpChannel(NetPeer peer, int channel, int updateTime, int windowSize, uint conv = 12345)
         {
             _outgoingPackets = new Queue<NetPacket>();
             _peer = peer;
-            _kcp = new KCP(12345, SendKCP);
+            _kcp = new KCP(conv, SendKCP);
             _kcp.NoDelay(1, 10, 2, 1);
-            _kcp.WndSize(128, 128);
+            _kcp.WndSize(windowSize, windowSize);
+            //_kcp.Interval(updateTime);
             _currentUpdateTime = 0;
             _nextUpdateTime = 0;
             _needUpdateFlag = false;

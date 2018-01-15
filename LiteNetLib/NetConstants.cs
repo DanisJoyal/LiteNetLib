@@ -42,7 +42,7 @@ namespace LiteNetLib
     public static class NetConstants
     {
         //can be tuned
-        public const int DefaultWindowSize = 64;
+        public const int DefaultWindowSize = 256;
         public const int DefaultUpdateTime = 15;
         public const int SocketBufferSize = 1024 * 1024; //1mb
         public const int SocketTTL = 255;
@@ -52,7 +52,7 @@ namespace LiteNetLib
         public const ushort HalfMaxSequence = MaxSequence / 2;
         public const int MinPacketSize = 576 - MaxUdpHeaderSize;
 
-        public const int MultiChannelSize = 1;  // Number of bytes
+        public const int MultiChannelSize = 0;  // Number of bytes
         public const int HeaderSize = NetPacket.HeaderSize;
         public const int SequencedHeaderSize = NetPacket.SequencedHeaderSize;
         public const int FragmentHeaderSize = NetPacket.FragmentHeaderSize;
