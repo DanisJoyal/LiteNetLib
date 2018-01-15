@@ -189,7 +189,7 @@ namespace LiteNetLib
 
         internal static int RelativeSequenceNumber(int number, int expected)
         {
-            return (number - expected + NetConstants.MaxSequence + NetConstants.HalfMaxSequence) % NetConstants.MaxSequence - NetConstants.HalfMaxSequence;
+            return ((number - expected) + NetConstants.MaxSequence) % NetConstants.MaxSequence;
         }
 
         private static readonly object DebugLogLock = new object();
