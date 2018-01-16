@@ -163,6 +163,10 @@ namespace LiteNetLib
 
                 //move forward
                 pendingPacket = pendingPacket.Next;
+                if (prevPacket != null)
+                {
+                    prevPacket.Next = pendingPacket;
+                }
 
                 //clear acked packet
                 _peer.Recycle(packetToClear.Packet);
