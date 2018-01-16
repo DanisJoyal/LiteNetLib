@@ -336,6 +336,11 @@ namespace LiteNetLib
         /// <param name="data">Data</param>
         /// <param name="options">Send options (reliable, unreliable, etc.)</param>
         /// <param name="channel">Set the channel wanted. See NetConstants.MultiChannelSize</param>
+        /// <exception cref="TooBigPacketException">
+        ///     If size exceeds maximum limit:<para/>
+        ///     MTU - headerSize bytes for Unreliable<para/>
+        ///     Fragment count exceeded ushort.MaxValue<para/>
+        /// </exception>
         public void Send(byte[] data, DeliveryMethod options, int channel = 0)
         {
             Send(data, 0, data.Length, options, channel);
@@ -347,6 +352,11 @@ namespace LiteNetLib
         /// <param name="dataWriter">DataWriter with data</param>
         /// <param name="options">Send options (reliable, unreliable, etc.)</param>
         /// <param name="channel">Set the channel wanted. See NetConstants.MultiChannelSize</param>
+        /// <exception cref="TooBigPacketException">
+        ///     If size exceeds maximum limit:<para/>
+        ///     MTU - headerSize bytes for Unreliable<para/>
+        ///     Fragment count exceeded ushort.MaxValue<para/>
+        /// </exception>
         public void Send(NetDataWriter dataWriter, DeliveryMethod options, int channel = 0)
         {
             Send(dataWriter.Data, 0, dataWriter.Length, options, channel);
@@ -360,6 +370,11 @@ namespace LiteNetLib
         /// <param name="length">Length of data</param>
         /// <param name="options">Send options (reliable, unreliable, etc.)</param>
         /// <param name="channel">Set the channel wanted. See NetConstants.MultiChannelSize</param>
+        /// <exception cref="TooBigPacketException">
+        ///     If size exceeds maximum limit:<para/>
+        ///     MTU - headerSize bytes for Unreliable<para/>
+        ///     Fragment count exceeded ushort.MaxValue<para/>
+        /// </exception>
         public void Send(byte[] data, int start, int length, DeliveryMethod options, int channel = 0)
         {
             if (_connectionState == ConnectionState.ShutdownRequested || 
@@ -376,7 +391,7 @@ namespace LiteNetLib
             {
                 if (options == DeliveryMethod.Sequenced || options == DeliveryMethod.Unreliable || options == DeliveryMethod.KCP)
                 {
-                    throw new ArgumentException("Unreliable packet size > allowed (" + (mtu - headerSize) + ")");
+                    throw new TooBigPacketException("Unreliable packet size exceeded maximum of " + (_mtu - headerSize) + " bytes");
                 }
                 
                 int packetFullSize = mtu - headerSize;
@@ -398,7 +413,7 @@ namespace LiteNetLib
 
                 if (totalPackets > ushort.MaxValue)
                 {
-                    throw new Exception("Too many fragments: " + totalPackets + " > " + ushort.MaxValue);
+                    throw new TooBigPacketException("Data was split in " + totalPackets + " fragments, which exceeds " + ushort.MaxValue);
                 }
 
                 int dataOffset = headerSize + NetPacket.FragmentHeaderSize;
@@ -536,7 +551,7 @@ namespace LiteNetLib
                     _packetPool.Recycle(packet);
                     break;
                 default:
-                    throw new Exception("Unknown packet property: " + packet.Property);
+                    throw new InvalidPacketException("Unknown packet property: " + packet.Property);
             }
         }
 
@@ -910,13 +925,6 @@ namespace LiteNetLib
                 }
                 return nextUpdateTime;
             }
-
-            bool packetHasBeenSent = false;
-
-            //Pending acks
-            foreach (var channel in _reliableOrderedChannels) packetHasBeenSent |= channel?.SendAcks() ?? false;
-            foreach (var channel in _reliableUnorderedChannels) packetHasBeenSent |= channel?.SendAcks() ?? false;
-            foreach (var channel in _kcpChannels) nextUpdateTime = Math.Min(nextUpdateTime, channel?.Update((uint)deltaTime) ?? NetConstants.DefaultUpdateTime);
 
             //Send ping
             _pingSendTimer += deltaTime;

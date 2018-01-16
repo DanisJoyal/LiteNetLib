@@ -503,7 +503,7 @@ namespace LiteNetLib
             }
         }
 
-        private void OnConnectionSolved(ConnectionRequest request)
+        private NetPeer OnConnectionSolved(ConnectionRequest request)
         {
             lock (_peers)
             {
@@ -515,7 +515,7 @@ namespace LiteNetLib
                     }
                     else
                     {
-                        return;
+                        return null;
                     }
                 }
                 if (request.Result == ConnectionRequestResult.Reject)
@@ -535,8 +535,10 @@ namespace LiteNetLib
                     var netEvent = CreateEvent(NetEventType.Connect);
                     netEvent.Peer = netPeer;
                     EnqueueEvent(netEvent);
+                    return netPeer;
                 }
             }
+            return null;
         }
 
         private void DataReceived(byte[] reusableBuffer, int count, NetEndPoint remoteEndPoint)
@@ -988,6 +990,7 @@ namespace LiteNetLib
         /// <param name="port">Server Port</param>
         /// <param name="key">Connection key</param>
         /// <returns>Null if connections limit reached, New NetPeer if new connection, Old NetPeer if already connected</returns>
+        /// <exception cref="InvalidOperationException">Manager is not running. Call <see cref="Start()"/></exception>
         public NetPeer Connect(string address, int port, string key)
         {
             var ep = new NetEndPoint(address, port);
@@ -1001,6 +1004,7 @@ namespace LiteNetLib
         /// <param name="port">Server Port</param>
         /// <param name="connectionData">Additional data for remote peer</param>
         /// <returns>Null if connections limit reached, New NetPeer if new connection, Old NetPeer if already connected</returns>
+        /// <exception cref="InvalidOperationException">Manager is not running. Call <see cref="Start()"/></exception>
         public NetPeer Connect(string address, int port, NetDataWriter connectionData)
         {
             var ep = new NetEndPoint(address, port);
@@ -1013,6 +1017,7 @@ namespace LiteNetLib
         /// <param name="target">Server end point (ip and port)</param>
         /// <param name="key">Connection key</param>
         /// <returns>Null if connections limit reached, New NetPeer if new connection, Old NetPeer if already connected</returns>
+        /// <exception cref="InvalidOperationException">Manager is not running. Call <see cref="Start()"/></exception>
         public NetPeer Connect(NetEndPoint target, string key)
         {
             return Connect(target, NetDataWriter.FromString(key));
@@ -1024,11 +1029,12 @@ namespace LiteNetLib
         /// <param name="target">Server end point (ip and port)</param>
         /// <param name="connectionData">Additional data for remote peer</param>
         /// <returns>Null if connections limit reached, New NetPeer if new connection, Old NetPeer if already connected</returns>
+        /// <exception cref="InvalidOperationException">Manager is not running. Call <see cref="Start()"/></exception>
         public NetPeer Connect(NetEndPoint target, NetDataWriter connectionData)
         {
             if (!IsRunning)
             {
-                throw new Exception("Client is not running");
+                throw new InvalidOperationException("Client is not running");
             }
             lock (_peers)
             {
