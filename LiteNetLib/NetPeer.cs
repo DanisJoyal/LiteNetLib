@@ -331,9 +331,9 @@ namespace LiteNetLib
         ///     MTU - headerSize bytes for Unreliable<para/>
         ///     Fragment count exceeded ushort.MaxValue<para/>
         /// </exception>
-        public void Send(byte[] data, DeliveryMethod options, int channel = 0)
+        public void Send(byte[] data, DeliveryMethod options)
         {
-            Send(data, 0, data.Length, options, channel);
+            Send(data, 0, data.Length, options);
         }
 
         /// <summary>
@@ -347,9 +347,9 @@ namespace LiteNetLib
         ///     MTU - headerSize bytes for Unreliable<para/>
         ///     Fragment count exceeded ushort.MaxValue<para/>
         /// </exception>
-        public void Send(NetDataWriter dataWriter, DeliveryMethod options, int channel = 0)
+        public void Send(NetDataWriter dataWriter, DeliveryMethod options)
         {
-            Send(dataWriter.Data, 0, dataWriter.Length, options, channel);
+            Send(dataWriter.Data, 0, dataWriter.Length, options);
         }
 
         /// <summary>
@@ -365,7 +365,7 @@ namespace LiteNetLib
         ///     MTU - headerSize bytes for Unreliable<para/>
         ///     Fragment count exceeded ushort.MaxValue<para/>
         /// </exception>
-        public void Send(byte[] data, int start, int length, DeliveryMethod options, int channel = 0)
+        public void Send(byte[] data, int start, int length, DeliveryMethod options)
         {
             if (_connectionState == ConnectionState.ShutdownRequested || 
                 _connectionState == ConnectionState.Disconnected)
@@ -412,7 +412,7 @@ namespace LiteNetLib
                 {
                     for (ushort i = 0; i < fullPacketsCount; i++)
                     {
-                        NetPacket p = _packetPool.Get(property, channel, packetFullSize);
+                        NetPacket p = _packetPool.Get(property, 0, packetFullSize);
                         p.FragmentId = _fragmentId;
                         p.FragmentPart = i;
                         p.FragmentsTotal = (ushort)totalPackets;
@@ -422,7 +422,7 @@ namespace LiteNetLib
                     }
                     if (lastPacketSize > 0)
                     {
-                        NetPacket p = _packetPool.Get(property, channel, lastPacketSize + NetPacket.FragmentHeaderSize);
+                        NetPacket p = _packetPool.Get(property, 0, lastPacketSize + NetPacket.FragmentHeaderSize);
                         p.FragmentId = _fragmentId;
                         p.FragmentPart = (ushort)fullPacketsCount; //last
                         p.FragmentsTotal = (ushort)totalPackets;
@@ -436,7 +436,7 @@ namespace LiteNetLib
             }
 
             //Else just send
-            NetPacket packet = _packetPool.GetWithData(property, channel, data, start, length);
+            NetPacket packet = _packetPool.GetWithData(property, 0, data, start, length);
             SendPacket(packet);
         }
 
