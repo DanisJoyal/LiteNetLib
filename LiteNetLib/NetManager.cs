@@ -423,7 +423,6 @@ namespace LiteNetLib
 #if STATS_ENABLED
                 ulong totalPacketLoss = 0;
 #endif
-                int sleepTime = UpdateTime;
                 //Process acks
                 NetPeer[] arrayPeers = GetPeers(ConnectionState.Any);
                 for (int i = 0; i < arrayPeers.Length; i++)
@@ -745,9 +744,6 @@ namespace LiteNetLib
                         break;
                     case PacketProperty.ReliableSequenced:
                         //TODO: netEvent.DeliveryMethod = DeliveryMethod.ReliableSequenced;
-                        break;
-                    case PacketProperty.KCP:
-                        netEvent.DeliveryMethod = DeliveryMethod.KCP;
                         break;
                 }
                 netEvent.DataReader.SetSource(packet.CopyPacketData());

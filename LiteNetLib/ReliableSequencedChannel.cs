@@ -7,9 +7,9 @@
 
         }
 
-        public bool SendNextPackets()
+        public void SendNextPackets()
         {
-            return false;    
+
         }
 
         public void AddToQueue(NetPacket packet)

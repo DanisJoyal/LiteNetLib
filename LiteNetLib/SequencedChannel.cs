@@ -22,7 +22,7 @@ namespace LiteNetLib
             _outgoingPackets.Push(packet);
         }
 
-        public bool SendNextPackets()
+        public void SendNextPackets()
         {
             _outgoingPackets.Switch();
             while (_outgoingPackets.Empty() != true)
@@ -33,7 +33,6 @@ namespace LiteNetLib
                 _peer.SendRawData(packet);
                 _peer.Recycle(packet);
             }
-            return packetHasBeenSent;
         }
 
         public void ProcessPacket(NetPacket packet)

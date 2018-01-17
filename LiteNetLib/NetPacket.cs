@@ -30,8 +30,7 @@ namespace LiteNetLib
         DiscoveryResponse,      //18
         Merged,                 //19
         ShutdownOk,             //20     
-        ReliableSequenced,      //21
-        KCP                     //22
+        ReliableSequenced       //21
     }
 
     internal sealed class NetPacket

@@ -54,7 +54,6 @@ namespace LiteNetLib
         private readonly SequencedChannel[] _sequencedChannels;
         private readonly SimpleChannel[] _simpleChannels;
         private readonly ReliableSequencedChannel[] _reliableSequencedChannels;
-        private readonly KcpChannel[] _kcpChannels;
 
         //MTU
         private int _mtu = NetConstants.PossibleMtu[0];
@@ -197,11 +196,6 @@ namespace LiteNetLib
             return _reliableSequencedChannels[index % _channelCapacity] ?? (_reliableSequencedChannels[index % _channelCapacity] = new ReliableSequencedChannel(this, index % _channelCapacity));
         }
 
-        private KcpChannel getKcpChannel(int index)
-        {
-            return _kcpChannels[index % _channelCapacity] ?? (_kcpChannels[index % _channelCapacity] = new KcpChannel(this, index % _channelCapacity, NetManager.UpdateTime, NetConstants.DefaultWindowSize));
-        }
-
         private NetPeer(NetManager netManager, NetEndPoint remoteEndPoint)
         {
             Statistics = new NetStatistics();
@@ -218,15 +212,13 @@ namespace LiteNetLib
             _sequencedChannels = new SequencedChannel[_channelCapacity];
             _simpleChannels = new SimpleChannel[_channelCapacity];
             _reliableSequencedChannels = new ReliableSequencedChannel[_channelCapacity];
-            _kcpChannels = new KcpChannel[_channelCapacity];
-
+            
             // Initialise default channel
             getReliableOrderedChannel(0);
             getReliableUnorderedChannel(0);
             getSequencedChannel(0);
             getSimpleChannel(0);
             getReliableSequencedChannel(0);
-            getKcpChannel(0);
 
             _holdedFragments = new Dictionary<ushort, IncomingFragments>();
 
@@ -311,8 +303,6 @@ namespace LiteNetLib
                     return PacketProperty.Sequenced;
                 case DeliveryMethod.ReliableOrdered:
                     return PacketProperty.ReliableOrdered;
-                case DeliveryMethod.KCP:
-                    return PacketProperty.KCP;
                 //TODO: case DeliveryMethod.ReliableSequenced:
                 //    return PacketProperty.ReliableSequenced;
                 default:
@@ -389,7 +379,7 @@ namespace LiteNetLib
             //Check fragmentation
             if (length + headerSize > mtu)
             {
-                if (options == DeliveryMethod.Sequenced || options == DeliveryMethod.Unreliable || options == DeliveryMethod.KCP)
+                if (options == DeliveryMethod.Sequenced || options == DeliveryMethod.Unreliable)
                 {
                     throw new TooBigPacketException("Unreliable packet size exceeded maximum of " + (_mtu - headerSize) + " bytes");
                 }
@@ -530,9 +520,6 @@ namespace LiteNetLib
                     break;
                 case PacketProperty.ReliableSequenced:
                     getReliableSequencedChannel(packet.Channel).AddToQueue(packet);
-                    break;
-                case PacketProperty.KCP:
-                    getKcpChannel(packet.Channel).AddToQueue(packet);
                     break;
 
                 case PacketProperty.MtuCheck:
@@ -709,7 +696,7 @@ namespace LiteNetLib
                     while (pos < packet.Size)
                     {
                         ushort size = BitConverter.ToUInt16(packet.RawData, pos);
-                        pos += 2;
+                        pos += sizeof(ushort);
                         NetPacket mergedPacket = _packetPool.GetAndRead(packet.RawData, pos, size);
                         if (mergedPacket == null)
                         {
@@ -777,10 +764,6 @@ namespace LiteNetLib
                     getReliableSequencedChannel(packet.Channel).ProcessPacket(packet);
                     break;
 
-                case PacketProperty.KCP:
-                    getKcpChannel(packet.Channel).ProcessPacket(packet);
-                    break;
-
                 //Simple packet without acks
                 case PacketProperty.Unreliable:
                     AddIncomingPacket(packet);
@@ -816,16 +799,46 @@ namespace LiteNetLib
             }
         }
 
+        internal void FlushMergePacket()
+        {
+            //If merging enabled
+            if (_mergePos > 0)
+            {
+                if (_mergeCount > 1)
+                {
+                    NetUtils.DebugWrite("Send merged: " + _mergePos + ", count: " + _mergeCount);
+                    _netManager.SendRaw(_mergeData.RawData, 0, NetConstants.HeaderSize + _mergePos, _remoteEndPoint);
+#if STATS_ENABLED
+                    Statistics.PacketsSent++;
+                    Statistics.BytesSent += (ulong)(NetConstants.HeaderSize + _mergePos);
+#endif
+                }
+                else
+                {
+                    //Send without length information and merging
+                    _netManager.SendRaw(_mergeData.RawData, NetConstants.HeaderSize + sizeof(ushort), _mergePos - sizeof(ushort), _remoteEndPoint);
+#if STATS_ENABLED
+                    Statistics.PacketsSent++;
+                    Statistics.BytesSent += (ulong)(_mergePos - 2);
+#endif
+                }
+                _mergePos = 0;
+                _mergeCount = 0;
+            }
+        }
+
         internal void SendRawData(NetPacket packet)
         {
             //2 - merge byte + minimal packet size + datalen(ushort)
             if (_netManager.MergeEnabled &&
-                CanMerge(packet.Property) &&
-                _mergePos + packet.Size + NetConstants.HeaderSize*2 + 2 < _mtu)
+                CanMerge(packet.Property))
             {
+                if(_mergePos + NetConstants.HeaderSize + packet.Size + sizeof(ushort) >= _mtu)
+                    FlushMergePacket();
+
                 FastBitConverter.GetBytes(_mergeData.RawData, _mergePos + NetConstants.HeaderSize, (ushort)packet.Size);
-                Buffer.BlockCopy(packet.RawData, 0, _mergeData.RawData, _mergePos + NetConstants.HeaderSize + 2, packet.Size);
-                _mergePos += packet.Size + 2;
+                Buffer.BlockCopy(packet.RawData, 0, _mergeData.RawData, _mergePos + NetConstants.HeaderSize + sizeof(ushort), packet.Size);
+                _mergePos += packet.Size + sizeof(ushort);
                 _mergeCount++;
 
                 //DebugWriteForce("Merged: " + _mergePos + "/" + (_mtu - 2) + ", count: " + _mergeCount);
@@ -843,67 +856,38 @@ namespace LiteNetLib
         /// <summary>
         /// Flush all queued packets
         /// </summary>
-        public bool Flush()
+        public void Flush()
         {
-            bool packetHasBeenSent = false;
             lock (_flushLock)
             {
-                foreach (var channel in _reliableOrderedChannels) packetHasBeenSent |= channel?.SendNextPackets() ?? false;
-                foreach (var channel in _reliableUnorderedChannels) packetHasBeenSent |= channel?.SendNextPackets() ?? false;
-                foreach (var channel in _reliableSequencedChannels) packetHasBeenSent |= channel?.SendNextPackets() ?? false;
-                foreach (var channel in _sequencedChannels) packetHasBeenSent |= channel?.SendNextPackets() ?? false;
-                foreach (var channel in _kcpChannels) packetHasBeenSent |= channel?.SendNextPackets() ?? false;
-                foreach (var channel in _simpleChannels) packetHasBeenSent |= channel?.SendNextPackets() ?? false;
+                foreach (var channel in _reliableOrderedChannels) channel?.SendNextPackets();
+                foreach (var channel in _reliableUnorderedChannels) channel?.SendNextPackets();
+                foreach (var channel in _reliableSequencedChannels) channel?.SendNextPackets();
+                foreach (var channel in _sequencedChannels)  channel?.SendNextPackets();
+                foreach (var channel in _simpleChannels) channel?.SendNextPackets();
 
-                //If merging enabled
-                if (_mergePos > 0)
-                {
-                    if (_mergeCount > 1)
-                    {
-                        NetUtils.DebugWrite("Send merged: " + _mergePos + ", count: " + _mergeCount);
-                        _netManager.SendRaw(_mergeData.RawData, 0, NetConstants.HeaderSize + _mergePos, _remoteEndPoint);
-                        packetHasBeenSent = true;
-#if STATS_ENABLED
-                        Statistics.PacketsSent++;
-                        Statistics.BytesSent += (ulong)(NetConstants.HeaderSize + _mergePos);
-#endif
-                    }
-                    else
-                    {
-                        //Send without length information and merging
-                        _netManager.SendRaw(_mergeData.RawData, NetConstants.HeaderSize + 2, _mergePos - 2, _remoteEndPoint);
-                        packetHasBeenSent = true;
-#if STATS_ENABLED
-                        Statistics.PacketsSent++;
-                        Statistics.BytesSent += (ulong)(_mergePos - 2);
-#endif
-                    }
-                    _mergePos = 0;
-                    _mergeCount = 0;
-                }
+                FlushMergePacket();
             }
-            return packetHasBeenSent;
+            return;
         }
 
-        internal int Update(int deltaTime)
+        internal void Update(int deltaTime)
         {
-            int nextUpdateTime = NetConstants.DefaultUpdateTime;
-
             if ((_connectionState == ConnectionState.Connected || _connectionState == ConnectionState.ShutdownRequested) 
             && _timeSinceLastPacket > _netManager.DisconnectTimeout)
             {
                 NetUtils.DebugWrite("[UPDATE] Disconnect by timeout: {0} > {1}", _timeSinceLastPacket, _netManager.DisconnectTimeout);
                 _netManager.DisconnectPeer(this, DisconnectReason.Timeout, 0, true, null, 0, 0);
-                return nextUpdateTime;
+                return;
             }
             if (_connectionState == ConnectionState.ShutdownRequested)
             {
                 _netManager.SendRaw(_shutdownPacket.RawData, 0, _shutdownPacket.Size, _remoteEndPoint);
-                return nextUpdateTime;
+                return;
             }
             if (_connectionState == ConnectionState.Disconnected)
             {
-                return nextUpdateTime;
+                return;
             }
 
             _timeSinceLastPacket += deltaTime;
@@ -917,13 +901,13 @@ namespace LiteNetLib
                     if (_connectAttempts > _netManager.MaxConnectAttempts)
                     {
                         _netManager.DisconnectPeer(this, DisconnectReason.ConnectionFailed, 0, true, null, 0, 0);
-                        return nextUpdateTime;
+                        return;
                     }
 
                     //else send connect again
                     SendConnectRequest();
                 }
-                return nextUpdateTime;
+                return;
             }
 
             //Send ping
@@ -984,8 +968,7 @@ namespace LiteNetLib
             }
             //MTU - end
             //Pending send
-            packetHasBeenSent |= Flush();
-            return packetHasBeenSent ? 0 : nextUpdateTime;
+            Flush();
         }
 
         //For channels
