@@ -8,7 +8,7 @@ namespace LiteNetLib
         private readonly Dictionary<NetEndPoint, NetPeer> _peersDict;
         private readonly NetPeer[] _peersArray;
         private bool _peersArrayHasChanged;
-        public NetPeer[] _peersArrayClone;
+        public NetPeer[] PeersArrayClone;
         public int CloneCount;
         public int Count;
 
@@ -20,7 +20,7 @@ namespace LiteNetLib
         public NetPeerCollection(int maxPeers)
         {
             _peersArray = new NetPeer[maxPeers];
-            _peersArrayClone = new NetPeer[maxPeers];
+            PeersArrayClone = new NetPeer[maxPeers];
             _peersDict = new Dictionary<NetEndPoint, NetPeer>();
             _peersArrayHasChanged = false;
         }
@@ -32,7 +32,7 @@ namespace LiteNetLib
 
         public void Clear()
         {
-            Array.Clear(_peersArrayClone, 0, Count);
+            Array.Clear(PeersArrayClone, 0, Count);
             Array.Clear(_peersArray, 0, Count);
             _peersDict.Clear();
             CloneCount = Count = 0;
@@ -58,23 +58,18 @@ namespace LiteNetLib
         {
             if(_peersArrayHasChanged == true)
             {
-                lock (_peersArrayClone)
+                lock (PeersArrayClone)
                 {
                     lock (_peersArray)
                     {
                         CloneCount = Count;
-                        Array.Copy(_peersArray, 0, _peersArrayClone, 0, CloneCount);
+                        Array.Copy(_peersArray, 0, PeersArrayClone, 0, CloneCount);
                         _peersArrayHasChanged = false;
                         return CloneCount;
                     }
                 }
             }
             return CloneCount;
-        }
-
-        public NetPeer[] GetClone()
-        {
-            return _peersArrayClone;
         }
 
         public NetPeer[] ToArray()

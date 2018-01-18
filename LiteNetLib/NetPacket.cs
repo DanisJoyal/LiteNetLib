@@ -45,7 +45,7 @@ namespace LiteNetLib
         private const int _PropertySize = 1;
         public PacketProperty Property
         {
-            get { return CachedProperty; }
+            get { return _cachedProperty; }
             set
             {
                 RawData[Size - _PropertySize] = (byte)((RawData[Size - _PropertySize] & 0x80) | ((byte)value & 0x1F));
@@ -86,7 +86,7 @@ namespace LiteNetLib
 
         public bool IsFragmented
         {
-            get { return CachedIsFragmented; }
+            get { return _cachedIsFragmented; }
             set
             {
                 if (value)
@@ -123,15 +123,15 @@ namespace LiteNetLib
         private int _size;
         public int Size { get { return _size; } set { _size = value; UpdateCache(); } }
 
-        private PacketProperty CachedProperty;
-        private int CachedDataSize;
-        private bool CachedIsFragmented;
+        private PacketProperty _cachedProperty;
+        private int _cachedDataSize;
+        private bool _cachedIsFragmented;
 
         public void UpdateCache()
         {
-            CachedProperty = (PacketProperty)(RawData[Size - _PropertySize] & 0x1F);
-            CachedDataSize = Size - GetHeaderSize();
-            CachedIsFragmented = (RawData[Size - _PropertySize] & 0x80) != 0;
+            _cachedProperty = (PacketProperty)(RawData[Size - _PropertySize] & 0x1F);
+            _cachedDataSize = Size - GetHeaderSize();
+            _cachedIsFragmented = (RawData[Size - _PropertySize] & 0x80) != 0;
         }
 
         private NetPacketPool _packetPool;
@@ -188,7 +188,7 @@ namespace LiteNetLib
 
         public int GetDataSize()
         {
-            return CachedDataSize;
+            return _cachedDataSize;
         }
 
         public byte[] CopyPacketData()

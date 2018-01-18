@@ -447,9 +447,9 @@ namespace LiteNetLib
 
                 //Process acks
                 _peers.UpdateClone();
-                lock (_peers._peersArrayClone)
+                lock (_peers.PeersArrayClone)
                 {
-                    NetPeer[] arrayPeers = _peers._peersArrayClone;
+                    NetPeer[] arrayPeers = _peers.PeersArrayClone;
                     int peersCount = _peers.CloneCount;
                     for (int i = 0; i < peersCount; i++)
                     {
@@ -811,9 +811,9 @@ namespace LiteNetLib
         public void SendToAll(byte[] data, int start, int length, DeliveryMethod options, int channel = 0)
         {
             _peers.UpdateClone();
-            lock (_peers._peersArrayClone)
+            lock (_peers.PeersArrayClone)
             {
-                NetPeer[] arrayPeers = _peers._peersArrayClone;
+                NetPeer[] arrayPeers = _peers.PeersArrayClone;
                 for (int i = 0; i < _peers.CloneCount; i++)
                 {
                     arrayPeers[i].Send(data, start, length, options);
@@ -857,9 +857,9 @@ namespace LiteNetLib
         public void SendToAll(byte[] data, int start, int length, DeliveryMethod options, NetPeer excludePeer, int channel = 0)
         {
             _peers.UpdateClone();
-            lock (_peers._peersArrayClone)
+            lock (_peers.PeersArrayClone)
             {
-                NetPeer[] arrayPeers = _peers._peersArrayClone;
+                NetPeer[] arrayPeers = _peers.PeersArrayClone;
                 for (int i = 0; i < _peers.CloneCount; i++)
                 {
                     var netPeer = arrayPeers[i];
@@ -1003,9 +1003,9 @@ namespace LiteNetLib
         public void Flush()
         {
             _peers.UpdateClone();
-            lock (_peers._peersArrayClone)
+            lock (_peers.PeersArrayClone)
             {
-                NetPeer[] arrayPeers = _peers._peersArrayClone;
+                NetPeer[] arrayPeers = _peers.PeersArrayClone;
                 for (int i = 0; i < _peers.CloneCount; i++)
                 {
                     arrayPeers[i].Flush();
