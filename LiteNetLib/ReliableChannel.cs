@@ -157,7 +157,12 @@ namespace LiteNetLib
                 {
                     _tailPendingPacket = prevPacket;
                 }
-                
+
+                if (pendingPacket == _headPendingPacket)
+                {
+                    _headPendingPacket = pendingPacket.Next;
+                }
+
                 var packetToClear = pendingPacket;
 
                 //move forward
@@ -253,12 +258,12 @@ namespace LiteNetLib
         }
 
         //Process incoming packet
-        public void ProcessPacket(NetPacket packet)
+        public bool ProcessPacket(NetPacket packet)
         {
             if (packet.Sequence >= NetConstants.MaxSequence)
             {
                 NetUtils.DebugWrite("[RR]Bad sequence");
-                return;
+                return false;
             }
 
             _mustSendAcks = true;
@@ -269,7 +274,7 @@ namespace LiteNetLib
             if (relateSeq > NetConstants.HalfMaxSequence)
             {
                 NetUtils.DebugWrite("[RR]Bad sequence");
-                return;
+                return false;
             }
 
             //Drop bad packets
@@ -277,13 +282,13 @@ namespace LiteNetLib
             {
                 //Too old packet doesn't ack
                 NetUtils.DebugWrite("[RR]ReliableInOrder too old");
-                return;
+                return false;
             }
             if (relate >= _windowSize * 2)
             {
                 //Some very new packet
                 NetUtils.DebugWrite("[RR]ReliableInOrder too new");
-                return;
+                return false;
             }
 
             //If very new - move window
@@ -318,7 +323,7 @@ namespace LiteNetLib
             {
                 NetUtils.DebugWrite("[RR]ReliableInOrder duplicate");
                 Monitor.Exit(_outgoingAcks);
-                return;
+                return false;
             }
 
             //save ack
@@ -353,7 +358,7 @@ namespace LiteNetLib
                     }
                 }
 
-                return;
+                return true;
             }
 
             //holded packet
@@ -366,6 +371,8 @@ namespace LiteNetLib
                 _earlyReceived[packet.Sequence % _windowSize] = true;
                 _peer.AddIncomingPacket(packet);
             }
+
+            return true;
         }
     }
 }

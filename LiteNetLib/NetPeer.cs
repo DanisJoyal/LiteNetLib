@@ -748,15 +748,24 @@ namespace LiteNetLib
 
                 //Process in order packets
                 case PacketProperty.Sequenced:
-                    getSequencedChannel(packet.Channel).ProcessPacket(packet);
+                    if (getSequencedChannel(packet.Channel).ProcessPacket(packet) == false)
+                    {
+                        packet.Recycle();
+                    }
                     break;
 
                 case PacketProperty.ReliableUnordered:
-                    getReliableUnorderedChannel(packet.Channel).ProcessPacket(packet);
+                    if(getReliableUnorderedChannel(packet.Channel).ProcessPacket(packet) == false)
+                    {
+                        packet.Recycle();
+                    }
                     break;
 
                 case PacketProperty.ReliableOrdered:
-                    getReliableOrderedChannel(packet.Channel).ProcessPacket(packet);
+                    if(getReliableOrderedChannel(packet.Channel).ProcessPacket(packet) == false)
+                    {
+                        packet.Recycle();
+                    }
                     break;
 
                 case PacketProperty.ReliableSequenced:

@@ -39,7 +39,7 @@ namespace LiteNetLib
         //can be tuned
 		public const int DefaultUpdateTime = 15;		
         public const int DefaultWindowSize = 64;
-        public const int SocketBufferSize = 4 * 1024 * 1024; //1mb
+        public const int SocketBufferSize = 1024 * 1024; //1mb
         public const int SocketTTL = 255;
         public const int PoolLimit = 1000;
 

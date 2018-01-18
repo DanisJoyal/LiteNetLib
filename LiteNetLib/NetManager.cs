@@ -212,6 +212,12 @@ namespace LiteNetLib
             _peers = new NetPeerCollection(maxConnections);
             _connectingPeers = new HashSet<NetEndPoint>();
             _maxConnections = maxConnections;
+            // Precreate all needed Merge Packets
+            for (int i = 0; i < maxConnections * 3; ++i)
+            {
+                NetPacket p = NetPacketPool.Get(PacketProperty.Sequenced, 0, NetConstants.MaxPacketSize);
+                p.Recycle();
+            }
         }
 
         internal void ConnectionLatencyUpdated(NetPeer fromPeer, int latency)
@@ -426,22 +432,29 @@ namespace LiteNetLib
 #if STATS_ENABLED
                 ulong totalPacketLoss = 0;
 #endif
+                // Flush disconnection first
+                lock (_peers)
+                {
+                    for (int i = 0; i < _peers.Count; i++)
+                    {
+                        NetPeer netPeer = _peers[i];
+                        if (netPeer.ConnectionState == ConnectionState.Disconnected)
+                        {
+                            _peers.Remove(netPeer);
+                        }
+                    }
+                }
+
                 //Process acks
                 _peers.UpdateClone();
                 lock (_peers._peersArrayClone)
                 {
                     NetPeer[] arrayPeers = _peers._peersArrayClone;
-                    for (int i = 0; i < _peers.CloneCount; i++)
+                    int peersCount = _peers.CloneCount;
+                    for (int i = 0; i < peersCount; i++)
                     {
                         NetPeer netPeer = arrayPeers[i];
-                        if (netPeer.ConnectionState == ConnectionState.Disconnected)
-                        {
-                            lock (_peers)
-                            {
-                                _peers.Remove(netPeer);
-                            }
-                        }
-                        else
+                        if (netPeer.ConnectionState != ConnectionState.Disconnected)
                         {
                             netPeer.Update(nextUpdateTime);
 #if STATS_ENABLED
@@ -453,15 +466,19 @@ namespace LiteNetLib
 #if STATS_ENABLED
                 Statistics.PacketLoss = totalPacketLoss;
 #endif
-                timePerRun.Stop();
-                int sleepTime = UpdateTime - (int)timePerRun.ElapsedMilliseconds;
+                int totalTimeToRun = (int)timePerRun.ElapsedMilliseconds;
+                int sleepTime = UpdateTime - totalTimeToRun;
                 if (sleepTime > 0)
+                {
                     Thread.Sleep(sleepTime);
+                }
                 else
                 {
                     ++SkipCount;
-                    sleepTime = 0;
+                    if(_peers.Count < 5)
+                        Thread.Sleep(5);    // In few client mode, dont skip
                 }
+                timePerRun.Stop();
                 nextUpdateTime = sleepTime;
             }
         }

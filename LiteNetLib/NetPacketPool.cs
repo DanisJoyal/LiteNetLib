@@ -82,7 +82,7 @@ namespace LiteNetLib
 
         public void Recycle(NetPacket packet)
         {
-            if (packet.Size > NetConstants.MaxPacketSize || _pool.Count > NetConstants.PoolLimit)
+            if (packet.Size > NetConstants.MaxPacketSize + NetConstants.SequencedHeaderSize)
             {
                 //Dont pool big packets. Save memory
                 return;

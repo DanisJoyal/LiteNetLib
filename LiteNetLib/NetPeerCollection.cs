@@ -40,10 +40,13 @@ namespace LiteNetLib
 
         public void Add(NetEndPoint endPoint, NetPeer peer)
         {
-            _peersArray[Count] = peer;
-            _peersDict.Add(endPoint, peer);
-            Count++;
-            _peersArrayHasChanged = true;
+            if (_peersDict.ContainsKey(endPoint) == false)
+            {
+                _peersDict.Add(endPoint, peer);
+                _peersArray[Count] = peer;
+                Count++;
+                _peersArrayHasChanged = true;
+            }
         }
 
         public bool ContainsAddress(NetEndPoint endPoint)
@@ -53,14 +56,14 @@ namespace LiteNetLib
 
         public int UpdateClone()
         {
-            if(_peersArrayHasChanged)
+            if(_peersArrayHasChanged == true)
             {
                 lock (_peersArrayClone)
                 {
                     lock (_peersArray)
                     {
-                        Array.Copy(_peersArray, _peersArrayClone, Count);
                         CloneCount = Count;
+                        Array.Copy(_peersArray, 0, _peersArrayClone, 0, CloneCount);
                         _peersArrayHasChanged = false;
                         return CloneCount;
                     }
