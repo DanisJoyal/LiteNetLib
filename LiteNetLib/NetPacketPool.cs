@@ -16,14 +16,14 @@ namespace LiteNetLib
         public NetPacket GetWithData(PacketProperty property, int channel, NetDataWriter writer)
         {
             var packet = Get(property, writer.Length, channel);
-            Buffer.BlockCopy(writer.Data, 0, packet.RawData, NetPacket.GetHeaderSize(property), writer.Length);
+            Buffer.BlockCopy(writer.Data, 0, packet.RawData, 0, writer.Length);
             return packet;
         }
 
         public NetPacket GetWithData(PacketProperty property, int channel, byte[] data, int start, int length)
         {
             var packet = Get(property, channel, length);
-            Buffer.BlockCopy(data, start, packet.RawData, NetPacket.GetHeaderSize(property), length);
+            Buffer.BlockCopy(data, start, packet.RawData, 0, length);
             return packet;
         }
 
@@ -43,7 +43,7 @@ namespace LiteNetLib
             if (packet == null)
             {
                 //allocate new packet
-                packet = new NetPacket(size);
+                packet = new NetPacket(size, this);
             }
             else
             {
@@ -74,9 +74,9 @@ namespace LiteNetLib
         {
             size += NetPacket.GetHeaderSize(property);
             NetPacket packet = GetPacket(size, true);
-            packet.Property = property;
             packet.Channel = channel;
             packet.Size = size;
+            packet.Property = property;
             return packet;
         }
 

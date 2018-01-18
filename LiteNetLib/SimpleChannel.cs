@@ -28,7 +28,7 @@ namespace LiteNetLib
             {
                 packet = _outgoingPackets.Pop();
                 _peer.SendRawData(packet);
-                _peer.Recycle(packet);
+                packet.Recycle();
             }
         }
     }

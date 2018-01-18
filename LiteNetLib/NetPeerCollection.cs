@@ -7,6 +7,9 @@ namespace LiteNetLib
     {
         private readonly Dictionary<NetEndPoint, NetPeer> _peersDict;
         private readonly NetPeer[] _peersArray;
+        private bool _peersArrayHasChanged;
+        public NetPeer[] _peersArrayClone;
+        public int CloneCount;
         public int Count;
 
         public NetPeer this[int index]
@@ -17,7 +20,9 @@ namespace LiteNetLib
         public NetPeerCollection(int maxPeers)
         {
             _peersArray = new NetPeer[maxPeers];
+            _peersArrayClone = new NetPeer[maxPeers];
             _peersDict = new Dictionary<NetEndPoint, NetPeer>();
+            _peersArrayHasChanged = false;
         }
 
         public bool TryGetValue(NetEndPoint endPoint, out NetPeer peer)
@@ -27,9 +32,10 @@ namespace LiteNetLib
 
         public void Clear()
         {
+            Array.Clear(_peersArrayClone, 0, Count);
             Array.Clear(_peersArray, 0, Count);
             _peersDict.Clear();
-            Count = 0;
+            CloneCount = Count = 0;
         }
 
         public void Add(NetEndPoint endPoint, NetPeer peer)
@@ -37,11 +43,35 @@ namespace LiteNetLib
             _peersArray[Count] = peer;
             _peersDict.Add(endPoint, peer);
             Count++;
+            _peersArrayHasChanged = true;
         }
 
         public bool ContainsAddress(NetEndPoint endPoint)
         {
             return _peersDict.ContainsKey(endPoint);
+        }
+
+        public int UpdateClone()
+        {
+            if(_peersArrayHasChanged)
+            {
+                lock (_peersArrayClone)
+                {
+                    lock (_peersArray)
+                    {
+                        Array.Copy(_peersArray, _peersArrayClone, Count);
+                        CloneCount = Count;
+                        _peersArrayHasChanged = false;
+                        return CloneCount;
+                    }
+                }
+            }
+            return CloneCount;
+        }
+
+        public NetPeer[] GetClone()
+        {
+            return _peersArrayClone;
         }
 
         public NetPeer[] ToArray()
@@ -61,6 +91,7 @@ namespace LiteNetLib
                     _peersArray[idx] = _peersArray[Count - 1];
                     _peersArray[Count - 1] = null;
                     Count--;
+                    _peersArrayHasChanged = true;
                     break;
                 }
             }
@@ -72,6 +103,7 @@ namespace LiteNetLib
             _peersArray[idx] = _peersArray[Count - 1];
             _peersArray[Count - 1] = null;
             Count--;
+            _peersArrayHasChanged = true;
         }
     }
 }

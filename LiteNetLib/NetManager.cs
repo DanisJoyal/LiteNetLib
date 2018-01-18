@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Net;
 using System.Threading;
 using LiteNetLib.Utils;
@@ -397,9 +398,11 @@ namespace LiteNetLib
         {
             SkipCount = 0;
             int nextUpdateTime = UpdateTime;
+            Stopwatch timePerRun = new Stopwatch();
             while (IsRunning)
             {
-                long startTicks = DateTime.Now.Ticks;
+                timePerRun.Reset();
+                timePerRun.Start();
 #if DEBUG
                 if (SimulateLatency)
                 {
@@ -424,34 +427,41 @@ namespace LiteNetLib
                 ulong totalPacketLoss = 0;
 #endif
                 //Process acks
-                NetPeer[] arrayPeers = GetPeers(ConnectionState.Any);
-                for (int i = 0; i < arrayPeers.Length; i++)
+                _peers.UpdateClone();
+                lock (_peers._peersArrayClone)
                 {
-                    var netPeer = arrayPeers[i];
-                    if (netPeer.ConnectionState == ConnectionState.Disconnected)
+                    NetPeer[] arrayPeers = _peers._peersArrayClone;
+                    for (int i = 0; i < _peers.CloneCount; i++)
                     {
-                        lock (_peers)
+                        NetPeer netPeer = arrayPeers[i];
+                        if (netPeer.ConnectionState == ConnectionState.Disconnected)
                         {
-                            _peers.Remove(netPeer);
+                            lock (_peers)
+                            {
+                                _peers.Remove(netPeer);
+                            }
+                        }
+                        else
+                        {
+                            netPeer.Update(nextUpdateTime);
+#if STATS_ENABLED
+                            totalPacketLoss += netPeer.Statistics.PacketLoss;
+#endif
                         }
                     }
-                    else
-                    {
-                        netPeer.Update(nextUpdateTime);
-#if STATS_ENABLED
-                        totalPacketLoss += netPeer.Statistics.PacketLoss;
-#endif
-                    }
                 }
-
 #if STATS_ENABLED
                 Statistics.PacketLoss = totalPacketLoss;
 #endif
-                int sleepTime = UpdateTime - (int)((DateTime.Now.Ticks - startTicks) / TimeSpan.TicksPerMillisecond);
+                timePerRun.Stop();
+                int sleepTime = UpdateTime - (int)timePerRun.ElapsedMilliseconds;
                 if (sleepTime > 0)
                     Thread.Sleep(sleepTime);
                 else
+                {
                     ++SkipCount;
+                    sleepTime = 0;
+                }
                 nextUpdateTime = sleepTime;
             }
         }
@@ -573,7 +583,7 @@ namespace LiteNetLib
                     {
                         var netEvent = CreateEvent(NetEventType.DiscoveryRequest);
                         netEvent.RemoteEndPoint = remoteEndPoint;
-                        netEvent.DataReader.SetSource(packet.RawData, NetConstants.HeaderSize, count);
+                        netEvent.DataReader.SetSource(packet);
                         EnqueueEvent(netEvent);
                     }
                     return;
@@ -581,7 +591,7 @@ namespace LiteNetLib
                     {
                         var netEvent = CreateEvent(NetEventType.DiscoveryResponse);
                         netEvent.RemoteEndPoint = remoteEndPoint;
-                        netEvent.DataReader.SetSource(packet.RawData, NetConstants.HeaderSize, count);
+                        netEvent.DataReader.SetSource(packet);
                         EnqueueEvent(netEvent);
                     }
                     return;
@@ -590,7 +600,7 @@ namespace LiteNetLib
                     {
                         var netEvent = CreateEvent(NetEventType.ReceiveUnconnected);
                         netEvent.RemoteEndPoint = remoteEndPoint;
-                        netEvent.DataReader.SetSource(packet.RawData, NetConstants.HeaderSize, count);
+                        netEvent.DataReader.SetSource(packet);
                         EnqueueEvent(netEvent);
                     }
                     return;
@@ -619,16 +629,16 @@ namespace LiteNetLib
                         if (netPeer.ConnectionState == ConnectionState.InProgress ||
                             netPeer.ConnectionState == ConnectionState.Connected)
                         {
-                            if (BitConverter.ToInt64(packet.RawData, NetConstants.HeaderSize) != netPeer.ConnectId)
+                            if (BitConverter.ToInt64(packet.RawData, 0) != netPeer.ConnectId)
                             {
                                 //Old or incorrect disconnect
-                                NetPacketPool.Recycle(packet);
+                                packet.Recycle();
                                 return;
                             }
 
                             var netEvent = CreateEvent(NetEventType.Disconnect);
                             netEvent.Peer = netPeer;
-                            netEvent.DataReader.SetSource(packet.RawData, NetConstants.HeaderSize + sizeof(long), packet.Size);
+                            netEvent.DataReader.SetSource(packet.RawData, sizeof(long), packet.GetDataSize() - sizeof(long));
                             netEvent.DisconnectReason = DisconnectReason.RemoteConnectionClose;
                             EnqueueEvent(netEvent);
                         }
@@ -648,7 +658,7 @@ namespace LiteNetLib
                             connectEvent.Peer = netPeer;
                             EnqueueEvent(connectEvent);
                         }
-                        NetPacketPool.Recycle(packet);
+                        packet.Recycle();
                         return;
                     default:
                         netPeer.ProcessPacket(packet);
@@ -675,7 +685,7 @@ namespace LiteNetLib
                 int peersCount = GetPeersCount(ConnectionState.Connected | ConnectionState.InProgress);
                 if (peersCount < _maxConnections)
                 {
-                    int protoId = BitConverter.ToInt32(packet.RawData, 1);
+                    int protoId = BitConverter.ToInt32(packet.RawData, 0);
                     if (protoId != NetConstants.ProtocolId)
                     {
                         NetUtils.DebugWrite(ConsoleColor.Cyan,
@@ -684,13 +694,13 @@ namespace LiteNetLib
                     }
 
                     //Getting new id for peer
-                    long connectionId = BitConverter.ToInt64(packet.RawData, 5);
+                    long connectionId = BitConverter.ToInt64(packet.RawData, sizeof(int));
 
                     // Read data and create request
                     var reader = new NetDataReader(null, 0, 0);
-                    if (packet.Size > 12)
+                    if (packet.GetDataSize() > sizeof(int) + sizeof(long))
                     {
-                        reader.SetSource(packet.RawData, 13, packet.Size);
+                        reader.SetSource(packet.RawData, sizeof(int) + sizeof(long), packet.GetDataSize() - sizeof(int) - sizeof(long));
                     }
 
                     lock (_connectingPeers)
@@ -746,7 +756,7 @@ namespace LiteNetLib
                         //TODO: netEvent.DeliveryMethod = DeliveryMethod.ReliableSequenced;
                         break;
                 }
-                netEvent.DataReader.SetSource(packet.CopyPacketData());
+                netEvent.DataReader.SetSource(packet);
                 EnqueueEvent(netEvent);
             }
         }
@@ -783,10 +793,14 @@ namespace LiteNetLib
         /// <param name="channel">Set the channel wanted. See NetConstants.MultiChannelSize</param>
         public void SendToAll(byte[] data, int start, int length, DeliveryMethod options, int channel = 0)
         {
-            NetPeer[] arrayPeers = GetPeers(ConnectionState.Any);
-            for (int i = 0; i < arrayPeers.Length; i++)
+            _peers.UpdateClone();
+            lock (_peers._peersArrayClone)
             {
-                arrayPeers[i].Send(data, start, length, options);
+                NetPeer[] arrayPeers = _peers._peersArrayClone;
+                for (int i = 0; i < _peers.CloneCount; i++)
+                {
+                    arrayPeers[i].Send(data, start, length, options);
+                }
             }
         }
 
@@ -825,13 +839,17 @@ namespace LiteNetLib
         /// <param name="channel">Set the channel wanted. See NetConstants.MultiChannelSize</param>
         public void SendToAll(byte[] data, int start, int length, DeliveryMethod options, NetPeer excludePeer, int channel = 0)
         {
-            NetPeer[] arrayPeers = GetPeers(ConnectionState.Any);
-            for (int i = 0; i < arrayPeers.Length; i++)
+            _peers.UpdateClone();
+            lock (_peers._peersArrayClone)
             {
-                var netPeer = arrayPeers[i];
-                if (netPeer != excludePeer)
+                NetPeer[] arrayPeers = _peers._peersArrayClone;
+                for (int i = 0; i < _peers.CloneCount; i++)
                 {
-                    netPeer.Send(data, start, length, options);
+                    var netPeer = arrayPeers[i];
+                    if (netPeer != excludePeer)
+                    {
+                        netPeer.Send(data, start, length, options);
+                    }
                 }
             }
         }
@@ -939,7 +957,7 @@ namespace LiteNetLib
                 return false;
             var packet = NetPacketPool.GetWithData(PacketProperty.DiscoveryRequest, 0, data, start, length);
             bool result = _socket.SendBroadcast(packet.RawData, 0, packet.Size, port);
-            NetPacketPool.Recycle(packet);
+            packet.Recycle();
             return result;
         }
 
@@ -967,10 +985,14 @@ namespace LiteNetLib
         /// </summary>
         public void Flush()
         {
-            NetPeer[] arrayPeers = GetPeers(ConnectionState.Any);
-            for (int i = 0; i < arrayPeers.Length; i++)
+            _peers.UpdateClone();
+            lock (_peers._peersArrayClone)
             {
-                arrayPeers[i].Flush();
+                NetPeer[] arrayPeers = _peers._peersArrayClone;
+                for (int i = 0; i < _peers.CloneCount; i++)
+                {
+                    arrayPeers[i].Flush();
+                }
             }
         }
 
@@ -1110,12 +1132,14 @@ namespace LiteNetLib
         public int GetPeersCount(ConnectionState peerState)
         {
             int count = 0;
-            NetPeer[] arrayPeers = GetPeers(ConnectionState.Any);
-            for (int i = 0; i < arrayPeers.Length; i++)
+            lock (_peers)
             {
-                if ((arrayPeers[i].ConnectionState & peerState) != 0)
+                for (int i = 0; i < _peers.Count; i++)
                 {
-                    count++;
+                    if ((_peers[i].ConnectionState & peerState) != 0)
+                    {
+                        count++;
+                    }
                 }
             }
             return count;

@@ -45,13 +45,14 @@ namespace LiteNetLib
         private const int _PropertySize = 1;
         public PacketProperty Property
         {
-            get { return (PacketProperty)(RawData[0] & 0x1F); }
+            get { return CachedProperty; }
             set
             {
-                RawData[0] = (byte)((RawData[0] & 0x80) | ((byte)value & 0x1F));
+                RawData[Size - _PropertySize] = (byte)((RawData[Size - _PropertySize] & 0x80) | ((byte)value & 0x1F));
+                UpdateCache();
 #if DEBUG_MESSAGES
                 // Debug purpose: Avoid mismatch between client and server. Can be removed.
-                RawData[0] |= (byte)(NetConstants.MultiChannelSize << 5);
+                RawData[Size - _PropertySize] |= (byte)(NetConstants.MultiChannelSize << 5);
 #endif
             }
         }
@@ -60,8 +61,8 @@ namespace LiteNetLib
 
         public ushort Sequence
         {
-            get { return BitConverter.ToUInt16(RawData, HeaderSize); }
-            set { FastBitConverter.GetBytes(RawData, HeaderSize, value); }
+            get { return BitConverter.ToUInt16(RawData, Size - HeaderSize - sizeof(ushort)); }
+            set { FastBitConverter.GetBytes(RawData, Size - HeaderSize - sizeof(ushort), value); }
         }
 
         public int Channel
@@ -69,9 +70,9 @@ namespace LiteNetLib
             get
             {
                 if (NetConstants.MultiChannelSize == 1)
-                    return (int)RawData[_PropertySize];
+                    return (int)RawData[Size - _PropertySize - sizeof(byte)];
                 if (NetConstants.MultiChannelSize == 2)
-                    return (int)BitConverter.ToUInt16(RawData, _PropertySize);
+                    return (int)BitConverter.ToUInt16(RawData, Size - _PropertySize - sizeof(ushort));
                 return 0;
             }
             set
@@ -85,45 +86,67 @@ namespace LiteNetLib
 
         public bool IsFragmented
         {
-            get { return (RawData[0] & 0x80) != 0; }
+            get { return CachedIsFragmented; }
             set
             {
                 if (value)
-                    RawData[0] |= 0x80; //set first bit
+                    RawData[Size - _PropertySize] |= 0x80; //set first bit
                 else
-                    RawData[0] &= 0x7F; //unset first bit
+                    RawData[Size - _PropertySize] &= 0x7F; //unset first bit
+                UpdateCache();
             }
         }
 
         private const int _FragmentIdSize = 2;
         public ushort FragmentId
         {
-            get { return BitConverter.ToUInt16(RawData, SequencedHeaderSize); }
-            set { FastBitConverter.GetBytes(RawData, SequencedHeaderSize, value); }
+            get { return BitConverter.ToUInt16(RawData, Size - SequencedHeaderSize - _FragmentIdSize); }
+            set { FastBitConverter.GetBytes(RawData, Size - SequencedHeaderSize - _FragmentIdSize, value); }
         }
 
         private const int _FragmentPartSize = 2;
         public ushort FragmentPart
         {
-            get { return BitConverter.ToUInt16(RawData, SequencedHeaderSize + _FragmentIdSize); }
-            set { FastBitConverter.GetBytes(RawData, SequencedHeaderSize + _FragmentIdSize, value); }
+            get { return BitConverter.ToUInt16(RawData, Size - SequencedHeaderSize - _FragmentIdSize - _FragmentPartSize); }
+            set { FastBitConverter.GetBytes(RawData, Size - SequencedHeaderSize - _FragmentIdSize - _FragmentPartSize, value); }
         }
 
         private const int _FragmentTotalSize = 2;
         public ushort FragmentsTotal
         {
-            get { return BitConverter.ToUInt16(RawData, SequencedHeaderSize + _FragmentIdSize + _FragmentPartSize); }
-            set { FastBitConverter.GetBytes(RawData, SequencedHeaderSize + _FragmentIdSize + _FragmentPartSize, value); }
+            get { return BitConverter.ToUInt16(RawData, Size - SequencedHeaderSize - _FragmentIdSize - _FragmentPartSize - _FragmentTotalSize); }
+            set { FastBitConverter.GetBytes(RawData, Size - SequencedHeaderSize - _FragmentIdSize - _FragmentPartSize - _FragmentTotalSize, value); }
         }
 
         //Data
         public byte[] RawData;
-        public int Size;
+        private int _size;
+        public int Size { get { return _size; } set { _size = value; UpdateCache(); } }
 
-        public NetPacket(int size)
+        private PacketProperty CachedProperty;
+        private int CachedDataSize;
+        private bool CachedIsFragmented;
+
+        public void UpdateCache()
         {
-            RawData = new byte[size];
-            Size = 0;
+            CachedProperty = (PacketProperty)(RawData[Size - _PropertySize] & 0x1F);
+            CachedDataSize = Size - GetHeaderSize();
+            CachedIsFragmented = (RawData[Size - _PropertySize] & 0x80) != 0;
+        }
+
+        private NetPacketPool _packetPool;
+
+        public void Recycle()
+        {
+            if (_packetPool != null)
+                _packetPool.Recycle(this);
+        }
+
+        public NetPacket(int size, NetPacketPool packetPool)
+        {
+            RawData = new byte[size];  // Try to save realloc
+            Size = size;
+            _packetPool = packetPool;
         }
 
         public bool Realloc(int toSize)
@@ -156,15 +179,22 @@ namespace LiteNetLib
 
         public int GetHeaderSize()
         {
+            if(IsFragmented)
+            {
+                return GetHeaderSize(Property) + NetPacket.FragmentHeaderSize;
+            }
             return GetHeaderSize(Property);
+        }
+
+        public int GetDataSize()
+        {
+            return CachedDataSize;
         }
 
         public byte[] CopyPacketData()
         {
-            int headerSize = GetHeaderSize(Property);
-            int dataSize = Size - headerSize;
-            byte[] data = new byte[dataSize];
-            Buffer.BlockCopy(RawData, headerSize, data, 0, dataSize);
+            byte[] data = new byte[GetDataSize()];
+            Buffer.BlockCopy(RawData, 0, data, 0, GetDataSize());
             return data;
         }
 
@@ -172,8 +202,8 @@ namespace LiteNetLib
         public bool FromBytes(byte[] data, int start, int packetSize)
         {
             //Reading property
-            byte property = (byte)(data[start] & 0x1F);
-            bool fragmented = (data[start] & 0x80) != 0;
+            byte property = (byte)(data[start + packetSize - _PropertySize] & 0x1F);
+            bool fragmented = (data[start + packetSize - _PropertySize] & 0x80) != 0;
             int headerSize = GetHeaderSize((PacketProperty) property);
 
 #if DEBUG_MESSAGES

@@ -8,6 +8,7 @@ namespace LiteNetLib.Utils
         protected byte[] _data;
         protected int _position;
         protected int _dataSize;
+        private NetPacket _packet;
 
         public byte[] Data
         {
@@ -31,30 +32,47 @@ namespace LiteNetLib.Utils
 
         public void SetSource(NetDataWriter dataWriter)
         {
+            Clear();
             _data = dataWriter.Data;
             _position = 0;
             _dataSize = dataWriter.Length;
+            _packet = null;
         }
 
         public void SetSource(byte[] source)
         {
+            Clear();
             _data = source;
             _position = 0;
             _dataSize = source.Length;
+            _packet = null;
         }
 
         public void SetSource(byte[] source, int offset)
         {
+            Clear();
             _data = source;
             _position = offset;
             _dataSize = source.Length;
+            _packet = null;
         }
 
         public void SetSource(byte[] source, int offset, int maxSize)
         {
+            Clear();
             _data = source;
             _position = offset;
             _dataSize = maxSize;
+            _packet = null;
+        }
+
+        internal void SetSource(NetPacket packet)
+        {
+            Clear();
+            _data = packet.RawData;
+            _position = 0;
+            _dataSize = packet.GetDataSize();
+            _packet = packet; 
         }
 
         /// <summary>
@@ -84,6 +102,11 @@ namespace LiteNetLib.Utils
         public NetDataReader(byte[] source, int offset, int maxSize)
         {
             SetSource(source, offset, maxSize);
+        }
+
+        internal NetDataReader(NetPacket packet)
+        {
+            SetSource(packet);
         }
 
         #region GetMethods
@@ -470,6 +493,9 @@ namespace LiteNetLib.Utils
             _position = 0;
             _dataSize = 0;
             _data = null;
+            if (_packet != null)
+                _packet.Recycle();
+            _packet = null;
         }
     }
 }

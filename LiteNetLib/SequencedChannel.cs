@@ -31,7 +31,7 @@ namespace LiteNetLib
                 _localSequence = (_localSequence + 1) % NetConstants.MaxSequence;
                 packet.Sequence = (ushort)_localSequence;
                 _peer.SendRawData(packet);
-                _peer.Recycle(packet);
+                packet.Recycle();
             }
         }
 

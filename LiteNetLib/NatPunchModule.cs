@@ -210,7 +210,7 @@ namespace LiteNetLib
 
         internal void ProcessMessage(NetEndPoint senderEndPoint, NetPacket packet)
         {
-            var dr = new NetDataReader(packet.RawData, NetConstants.HeaderSize, packet.Size);
+            var dr = new NetDataReader(packet);
             switch (packet.Property)
             {
                 case PacketProperty.NatIntroductionRequest:

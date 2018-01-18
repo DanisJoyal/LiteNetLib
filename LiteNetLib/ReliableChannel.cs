@@ -108,7 +108,6 @@ namespace LiteNetLib
 
             byte[] acksData = packet.RawData;
             NetUtils.DebugWrite("[PA]AcksStart: {0}", ackWindowStart);
-            int startByte = NetConstants.SequencedHeaderSize;
             Monitor.Enter(_pendingPackets);
             PendingPacket pendingPacket = _headPendingPacket;
             PendingPacket prevPacket = null;
@@ -128,7 +127,7 @@ namespace LiteNetLib
                 }
 
                 int idx = (ackWindowStart + seq) % _windowSize;
-                int currentByte = startByte + idx / BitsInByte;
+                int currentByte = idx / BitsInByte;
                 int currentBit = idx % BitsInByte;
                 if ((acksData[currentByte] & (1 << currentBit)) == 0)
                 {
@@ -169,7 +168,7 @@ namespace LiteNetLib
                 }
 
                 //clear acked packet
-                _peer.Recycle(packetToClear.Packet);
+                packetToClear.Packet.Recycle();
                 packetToClear.Clear();
                 NetUtils.DebugWrite("[PA]Removing reliableInOrder ack: {0} - true", seq);
             }
@@ -302,7 +301,7 @@ namespace LiteNetLib
                 while (_remoteWindowStart != newWindowStart)
                 {
                     ackIdx = _remoteWindowStart % _windowSize;
-                    ackByte = 3 + ackIdx / BitsInByte;
+                    ackByte = ackIdx / BitsInByte;
                     ackBit = ackIdx % BitsInByte;
                     _outgoingAcks.RawData[ackByte] &= (byte)~(1 << ackBit);
                     _remoteWindowStart = (_remoteWindowStart + 1) % NetConstants.MaxSequence;
@@ -313,7 +312,7 @@ namespace LiteNetLib
             //trigger acks send
             _mustSendAcks = true;
             ackIdx = packet.Sequence % _windowSize;
-            ackByte = 3 + ackIdx / BitsInByte;
+            ackByte = ackIdx / BitsInByte;
             ackBit = ackIdx % BitsInByte;
             if ((_outgoingAcks.RawData[ackByte] & (1 << ackBit)) != 0)
             {
