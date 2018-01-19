@@ -46,48 +46,53 @@ namespace LiteNetLib
                 int result;
 
                 //Reading data
-                try
+                while (_running && socket.Available != 0)
                 {
-                    result = socket.ReceiveFrom(receiveBuffer, 0, receiveBuffer.Length, SocketFlags.None, ref bufferEndPoint);
-                    if (!bufferNetEndPoint.EndPoint.Equals(bufferEndPoint))
+                    try
                     {
-                        bufferNetEndPoint = new NetEndPoint((IPEndPoint)bufferEndPoint);
+                        result = socket.ReceiveFrom(receiveBuffer, 0, receiveBuffer.Length, SocketFlags.None, ref bufferEndPoint);
+                        if (!bufferNetEndPoint.EndPoint.Equals(bufferEndPoint))
+                        {
+                            bufferNetEndPoint = new NetEndPoint((IPEndPoint)bufferEndPoint);
+                        }
                     }
-                }
-                catch (SocketException ex)
-                {
-                    if (ex.SocketErrorCode == SocketError.ConnectionReset ||
-                        ex.SocketErrorCode == SocketError.MessageSize || 
-                        ex.SocketErrorCode == SocketError.Interrupted)
+                    catch (SocketException ex)
                     {
-                        //10040 - message too long
-                        //10054 - remote close (not error)
-                        //Just UDP
-                        NetUtils.DebugWrite(ConsoleColor.DarkRed, "[R] Ingored error: {0} - {1}", (int)ex.SocketErrorCode, ex.ToString() );
+                        if (ex.SocketErrorCode == SocketError.ConnectionReset ||
+                            ex.SocketErrorCode == SocketError.MessageSize ||
+                            ex.SocketErrorCode == SocketError.Interrupted || 
+                            ex.SocketErrorCode == SocketError.WouldBlock)
+                        {
+                            //10040 - message too long
+                            //10054 - remote close (not error)
+                            //Just UDP
+                            NetUtils.DebugWrite(ConsoleColor.DarkRed, "[R] Ingored error: {0} - {1}", (int)ex.SocketErrorCode, ex.ToString());
+                            continue;
+                        }
+                        NetUtils.DebugWriteError("[R]Error code: {0} - {1}", (int)ex.SocketErrorCode, ex.ToString());
+                        lock (_receiveLock)
+                        {
+                            _onMessageReceived(null, 0, (int)ex.SocketErrorCode, bufferNetEndPoint);
+                        }
+
                         continue;
                     }
-                    NetUtils.DebugWriteError("[R]Error code: {0} - {1}", (int)ex.SocketErrorCode, ex.ToString());
+
+                    //All ok!
+                    NetUtils.DebugWrite(ConsoleColor.Blue, "[R]Received data from {0}, result: {1}", bufferNetEndPoint.ToString(), result);
                     lock (_receiveLock)
                     {
-                        _onMessageReceived(null, 0, (int) ex.SocketErrorCode, bufferNetEndPoint);
+                        _onMessageReceived(receiveBuffer, result, 0, bufferNetEndPoint);
                     }
-
-                    continue;
                 }
-
-                //All ok!
-                NetUtils.DebugWrite(ConsoleColor.Blue, "[R]Received data from {0}, result: {1}", bufferNetEndPoint.ToString(), result);
-                lock (_receiveLock)
-                {
-                    _onMessageReceived(receiveBuffer, result, 0, bufferNetEndPoint);
-                }
+                Thread.Sleep(15);
             }
         }
 
         public bool Bind(IPAddress addressIPv4, IPAddress addressIPv6, int port, bool reuseAddress)
         {
             _udpSocketv4 = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-            _udpSocketv4.Blocking = true;
+            _udpSocketv4.Blocking = false;
             _udpSocketv4.ReceiveBufferSize = NetConstants.SocketBufferSize;
             _udpSocketv4.SendBufferSize = NetConstants.SocketBufferSize;
             _udpSocketv4.Ttl = NetConstants.SocketTTL;
@@ -121,7 +126,7 @@ namespace LiteNetLib
                 return true;
 
             _udpSocketv6 = new Socket(AddressFamily.InterNetworkV6, SocketType.Dgram, ProtocolType.Udp);
-            _udpSocketv6.Blocking = true;
+            _udpSocketv6.Blocking = false;
             _udpSocketv6.ReceiveBufferSize = NetConstants.SocketBufferSize;
             _udpSocketv6.SendBufferSize = NetConstants.SocketBufferSize;
             //_udpSocketv6.Ttl = NetConstants.SocketTTL;
