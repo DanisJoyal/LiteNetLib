@@ -61,6 +61,8 @@ namespace LiteNetLib
         public NetPacket GetAndRead(byte[] data, int start, int count)
         {
             NetPacket packet = GetPacket(count, false);
+            packet.ByteSent = 0;
+            packet.RecycleAfterSend = false;
             if (!packet.FromBytes(data, start, count))
             {
                 Recycle(packet);
@@ -94,6 +96,7 @@ namespace LiteNetLib
             packet.IsFragmented = false;
             lock (_pool)
             {
+                packet.ByteSent = packet.Size;  // Dont send it if its in the queue
                 _pool.Push(packet);
             }
         }

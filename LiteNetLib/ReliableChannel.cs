@@ -195,8 +195,11 @@ namespace LiteNetLib
                 _mustSendAcks = false;
                 NetUtils.DebugWrite("[RR]SendAcks");
                 Monitor.Enter(_outgoingAcks);
-                _peer.SendRawData(_outgoingAcks);
+                NetPacket packet = _peer.NetManager.NetPacketPool.GetAndRead(_outgoingAcks.RawData, 0, _outgoingAcks.Size);
                 Monitor.Exit(_outgoingAcks);
+
+                packet.RecycleAfterSend = true;
+                _peer.SendRawData(packet);
             }
 
             long currentTime = DateTime.UtcNow.Ticks;
@@ -252,6 +255,7 @@ namespace LiteNetLib
 
                 currentPacket.TimeStamp = currentTime;
                 currentPacket.Sended = true;
+                currentPacket.Packet.RecycleAfterSend = false;
                 _peer.SendRawData(currentPacket.Packet);
             } while ((currentPacket = currentPacket.Next) != null);
             Monitor.Exit(_pendingPackets);

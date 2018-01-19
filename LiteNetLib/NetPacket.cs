@@ -149,6 +149,8 @@ namespace LiteNetLib
             RawData = new byte[size];  // Try to save realloc
             Size = size;
             _packetPool = packetPool;
+            ByteSent = 0;
+            RecycleAfterSend = false;
         }
 
         public bool Realloc(int toSize)

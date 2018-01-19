@@ -780,6 +780,7 @@ namespace LiteNetLib
                 case PacketProperty.MtuCheck:
                 case PacketProperty.MtuOk:
                     ProcessMtuPacket(packet);
+                    packet.Recycle();
                     break;
 
                 case PacketProperty.ShutdownOk:
@@ -803,7 +804,7 @@ namespace LiteNetLib
                 case PacketProperty.Disconnect:
                     return false;
                 default:
-                    return true;
+                    return false;
             }
         }
 
@@ -817,13 +818,9 @@ namespace LiteNetLib
                     NetUtils.DebugWrite("Send merged: " + _mergePos + ", count: " + _mergeCount);
                     _mergeData.Size = NetConstants.HeaderSize + _mergePos;
                     _mergeData.Property = PacketProperty.Merged;
-                    _netManager.SendRaw(_mergeData, _remoteEndPoint);
-                    if (_mergeData.ByteSent != _mergeData.Size)
-                    {
-                        _mergeData.RecycleAfterSend = true;
-                        _mergeData = _packetPool.Get(PacketProperty.Merged, 0, NetConstants.MaxPacketSize);
-                    }
-                    _mergeData.ByteSent = 0;
+                    NetPacket packet = _packetPool.GetAndRead(_mergeData.RawData, 0, _mergeData.Size);
+                    packet.RecycleAfterSend = true;
+                    _netManager.SendRaw(packet, _remoteEndPoint);
 #if STATS_ENABLED
                     Statistics.PacketsSent++;
                     Statistics.BytesSent += (ulong)(NetConstants.HeaderSize + _mergePos);
@@ -858,6 +855,9 @@ namespace LiteNetLib
                 Buffer.BlockCopy(packet.RawData, 0, _mergeData.RawData, _mergePos + sizeof(ushort), packet.Size);
                 _mergePos += packet.Size + sizeof(ushort);
                 _mergeCount++;
+
+                if (packet.RecycleAfterSend == true)
+                    packet.Recycle();
 
                 //DebugWriteForce("Merged: " + _mergePos + "/" + (_mtu - 2) + ", count: " + _mergeCount);
                 return;
