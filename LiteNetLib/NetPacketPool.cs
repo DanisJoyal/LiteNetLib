@@ -77,6 +77,8 @@ namespace LiteNetLib
             packet.Channel = channel;
             packet.Size = size;
             packet.Property = property;
+            packet.ByteSent = 0;
+            packet.RecycleAfterSend = false;
             return packet;
         }
 

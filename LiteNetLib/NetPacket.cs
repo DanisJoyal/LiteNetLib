@@ -122,6 +122,8 @@ namespace LiteNetLib
         public byte[] RawData;
         private int _size;
         public int Size { get { return _size; } set { _size = value; UpdateCache(); } }
+        public int ByteSent;
+        public bool RecycleAfterSend;
 
         private PacketProperty _cachedProperty;
         private int _cachedDataSize;

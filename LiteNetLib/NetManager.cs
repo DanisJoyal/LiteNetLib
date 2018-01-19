@@ -60,6 +60,8 @@ namespace LiteNetLib
         private readonly Thread _logicThread;
 
         private readonly SwitchQueue<NetEvent> _netEventsQueue;
+        private readonly Queue<NetPacket> _netPacketsQueue;
+        private readonly Queue<NetEndPoint> _netEndPointsQueue;
         private readonly Stack<NetEvent> _netEventsPool;
         private readonly INetEventListener _netEventListener;
 
@@ -205,6 +207,8 @@ namespace LiteNetLib
             _socket = new NetSocket(ReceiveLogic);
             _netEventListener = listener;
             _netEventsQueue = new SwitchQueue<NetEvent>();
+            _netPacketsQueue = new Queue<NetPacket>();
+            _netEndPointsQueue = new Queue<NetEndPoint>();
             _netEventsPool = new Stack<NetEvent>();
             NetPacketPool = new NetPacketPool();
             NatPunchModule = new NatPunchModule(this);
@@ -230,20 +234,51 @@ namespace LiteNetLib
 
         internal bool SendRawAndRecycle(NetPacket packet, NetEndPoint remoteEndPoint)
         {
-            var result = SendRaw(packet.RawData, 0, packet.Size, remoteEndPoint);
-            NetPacketPool.Recycle(packet);
+            packet.RecycleAfterSend = true;
+            var result = SendRaw(packet, remoteEndPoint);
             return result;
         }
 
-        internal bool SendRaw(byte[] message, int start, int length, NetEndPoint remoteEndPoint)
+        internal bool SendRaw(NetPacket packet, NetEndPoint remoteEndPoint)
+        {
+            lock (_netPacketsQueue)
+            {
+                _netPacketsQueue.Enqueue(packet);
+                _netEndPointsQueue.Enqueue(remoteEndPoint);
+                while (_netPacketsQueue.Count > 0)
+                {
+                    NetPacket sentPacket = _netPacketsQueue.Peek();
+                    NetEndPoint sentEndPoint = _netEndPointsQueue.Peek();
+                    int sentLength = SendRaw(sentPacket.RawData, sentPacket.ByteSent, sentPacket.Size - sentPacket.ByteSent, sentEndPoint);
+                    if (sentLength > 0)
+                    {
+                        sentPacket.ByteSent = sentPacket.ByteSent + sentLength;
+                        if (sentPacket.ByteSent == sentPacket.Size)
+                        {
+                            if (sentPacket.RecycleAfterSend)
+                                sentPacket.Recycle();
+                            sentPacket.ByteSent = 0;
+                            _netPacketsQueue.Dequeue();
+                            _netEndPointsQueue.Dequeue();
+                            continue;
+                        }
+                    }
+                    break;
+                }
+            }
+            return true;
+        }
+
+        internal int SendRaw(byte[] message, int start, int length, NetEndPoint remoteEndPoint)
         {
             if (!IsRunning)
-                return false;
+                return 0;
 
             int errorCode = 0;
-            if (_socket.SendTo(message, start, length, remoteEndPoint, ref errorCode) <= 0)
+            int sentLength = _socket.SendTo(message, start, length, remoteEndPoint, ref errorCode);
+            if (sentLength < 0)
             {
-                return false;
+                return -1;
             }
 
             //10040 message to long... need to check
@@ -251,7 +286,7 @@ namespace LiteNetLib
             if (errorCode == 10040)
             {
                 NetUtils.DebugWrite(ConsoleColor.Red, "[SRD] 10040, datalen: {0}", length);
-                return false;
+                return -1;
             }
             if (errorCode != 0 && errorCode != 10065)
             {
@@ -265,14 +300,14 @@ namespace LiteNetLib
                 netEvent.RemoteEndPoint = remoteEndPoint;
                 netEvent.AdditionalData = errorCode;
                 EnqueueEvent(netEvent);
-                return false;
+                return -1;
             }
 #if STATS_ENABLED
             Statistics.PacketsSent++;
             Statistics.BytesSent += (uint)length;
 #endif
 
-            return true;
+            return sentLength;
         }
 
         internal void DisconnectPeer(
@@ -583,7 +618,6 @@ namespace LiteNetLib
             Statistics.PacketsReceived++;
             Statistics.BytesReceived += (uint) count;
 #endif
-
             //Try read packet
             NetPacket packet = NetPacketPool.GetAndRead(reusableBuffer, 0, count);
             if (packet == null)
@@ -892,6 +926,8 @@ namespace LiteNetLib
                 return false;
             }
             _netEventsQueue.Clear();
+            _netPacketsQueue.Clear();
+            _netEndPointsQueue.Clear();
             IPAddress ipv4 = NetEndPoint.GetFromString(addressIPv4);
             IPAddress ipv6 = NetEndPoint.GetFromString(addressIPv6);
             if (!_socket.Bind(ipv4, ipv6, port, ReuseAddress))
@@ -912,6 +948,8 @@ namespace LiteNetLib
                 return false;
             }
             _netEventsQueue.Clear();
+            _netPacketsQueue.Clear();
+            _netEndPointsQueue.Clear();
             if (!_socket.Bind(IPAddress.Any, IPAddress.IPv6Any, port, ReuseAddress))
                 return false;
             IsRunning = true;
