@@ -8,6 +8,9 @@ namespace LiteNetLib
     internal sealed class NetSocket
     {
         private Socket _udpSocketv4;
+        private EndPoint _bufferEndPointv4;
+        private NetEndPoint _bufferNetEndPointv4;
+
         private Socket _udpSocketv6;
         private Thread _threadv4;
         private Thread _threadv6;
@@ -25,7 +28,7 @@ namespace LiteNetLib
 #if UNITY_4 || UNITY_5 || UNITY_5_3_OR_NEWER
             IPv6Support = Socket.SupportsIPv6;
 #else
-            IPv6Support = Socket.OSSupportsIPv6;
+            IPv6Support = false; //Socket.OSSupportsIPv6;
 #endif
         }
 
@@ -37,13 +40,28 @@ namespace LiteNetLib
         private void ReceiveLogic(object state)
         {
             Socket socket = (Socket)state;
-            EndPoint bufferEndPoint = new IPEndPoint(socket.AddressFamily == AddressFamily.InterNetwork ? IPAddress.Any : IPAddress.IPv6Any, 0);
-            NetEndPoint bufferNetEndPoint = new NetEndPoint((IPEndPoint)bufferEndPoint);
-            byte[] receiveBuffer = new byte[NetConstants.PacketSizeLimit];
+            byte[] receiveBuffer = new byte[NetConstants.SocketBufferSize];
 
-            while (_running)
+            while(_running)
+                Receive(false, receiveBuffer);
+        }
+
+        public void Receive(bool ipV6, byte[] receiveBuffer)
+        {
+            Socket socket = _udpSocketv4;
+            EndPoint bufferEndPoint = _bufferEndPointv4;
+            NetEndPoint bufferNetEndPoint = _bufferNetEndPointv4;
+            int result;
+
+            //if (ipV6 == true)
+            //{
+                //socket = _udpSocketv6;
+            //}
+
+            while (true)
             {
-                int result;
+                if (socket == null || socket.Available < 1)
+                    return;
 
                 //Reading data
                 try
@@ -56,23 +74,28 @@ namespace LiteNetLib
                 }
                 catch (SocketException ex)
                 {
+                    if (ex.SocketErrorCode == SocketError.WouldBlock)
+                    {
+                        // Hiii! Increase buffer size
+                        return;
+                    }
                     if (ex.SocketErrorCode == SocketError.ConnectionReset ||
-                        ex.SocketErrorCode == SocketError.MessageSize || 
+                        ex.SocketErrorCode == SocketError.MessageSize ||
                         ex.SocketErrorCode == SocketError.Interrupted)
                     {
                         //10040 - message too long
                         //10054 - remote close (not error)
                         //Just UDP
-                        NetUtils.DebugWrite(ConsoleColor.DarkRed, "[R] Ingored error: {0} - {1}", (int)ex.SocketErrorCode, ex.ToString() );
-                        continue;
+                        NetUtils.DebugWrite(ConsoleColor.DarkRed, "[R] Ingored error: {0} - {1}", (int)ex.SocketErrorCode, ex.ToString());
+                        return;
                     }
                     NetUtils.DebugWriteError("[R]Error code: {0} - {1}", (int)ex.SocketErrorCode, ex.ToString());
                     lock (_receiveLock)
                     {
-                        _onMessageReceived(null, 0, (int) ex.SocketErrorCode, bufferNetEndPoint);
+                        _onMessageReceived(null, 0, (int)ex.SocketErrorCode, bufferNetEndPoint);
                     }
 
-                    continue;
+                    return;
                 }
 
                 //All ok!
@@ -87,7 +110,7 @@ namespace LiteNetLib
         public bool Bind(IPAddress addressIPv4, IPAddress addressIPv6, int port, bool reuseAddress)
         {
             _udpSocketv4 = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-            _udpSocketv4.Blocking = true;
+            _udpSocketv4.Blocking = false;
             _udpSocketv4.ReceiveBufferSize = NetConstants.SocketBufferSize;
             _udpSocketv4.SendBufferSize = NetConstants.SocketBufferSize;
             _udpSocketv4.Ttl = NetConstants.SocketTTL;
@@ -111,10 +134,14 @@ namespace LiteNetLib
             }
             LocalPort = ((IPEndPoint) _udpSocketv4.LocalEndPoint).Port;
             _running = true;
-            _threadv4 = new Thread(ReceiveLogic);
-            _threadv4.Name = "SocketThreadv4(" + LocalPort + ")";
-            _threadv4.IsBackground = true;
-            _threadv4.Start(_udpSocketv4);
+            //_threadv4 = new Thread(ReceiveLogic);
+            //_threadv4.Name = "SocketThreadv4(" + LocalPort + ")";
+            //_threadv4.IsBackground = true;
+            //_threadv4.Start(_udpSocketv4);
+
+            _bufferEndPointv4 = new IPEndPoint(_udpSocketv4.AddressFamily == AddressFamily.InterNetwork ? IPAddress.Any : IPAddress.IPv6Any, 0);
+            _bufferNetEndPointv4 = new NetEndPoint((IPEndPoint)_bufferEndPointv4);
+
 
             //Check IPv6 support
             if (!IPv6Support)

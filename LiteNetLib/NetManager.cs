@@ -405,10 +405,11 @@ namespace LiteNetLib
             SkipCount = 0;
             int nextUpdateTime = UpdateTime;
             Stopwatch timePerRun = new Stopwatch();
+            NetPacket receiveBuffer = NetPacketPool.Get(PacketProperty.Sequenced, 0, NetConstants.SocketBufferSize);
             while (IsRunning)
             {
-                timePerRun.Reset();
-                timePerRun.Start();
+                //timePerRun.Reset();
+                //timePerRun.Start();
 #if DEBUG
                 if (SimulateLatency)
                 {
@@ -463,23 +464,31 @@ namespace LiteNetLib
                         }
                     }
                 }
+
+                _socket.Receive(false, receiveBuffer.RawData);
+
 #if STATS_ENABLED
                 Statistics.PacketLoss = totalPacketLoss;
 #endif
-                int totalTimeToRun = (int)timePerRun.ElapsedMilliseconds;
-                int sleepTime = UpdateTime - totalTimeToRun;
-                if (sleepTime > 0)
-                {
-                    Thread.Sleep(sleepTime);
-                }
-                else
-                {
-                    ++SkipCount;
-                    if(_peers.Count < 5)
-                        Thread.Sleep(5);    // In few client mode, dont skip
-                }
-                timePerRun.Stop();
-                nextUpdateTime = sleepTime;
+                //int totalTimeToRun = (int)timePerRun.ElapsedMilliseconds;
+                //int sleepTime = UpdateTime - totalTimeToRun;
+                //if (sleepTime > 0)
+                //{
+                //    Thread.Sleep(sleepTime);
+                //}
+                //else
+                //{
+                //    ++SkipCount;
+                //    if(_peers.Count < 5)
+                //        Thread.Sleep(5);    // In few client mode, dont skip
+                //}
+                //timePerRun.Stop();
+                //if (_peers.Count < 5)
+                //    Thread.Sleep(10);
+                //else
+                //    Thread.Sleep(1);
+                Thread.Sleep(UpdateTime);
+                nextUpdateTime = UpdateTime;
             }
         }
         

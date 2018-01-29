@@ -871,10 +871,10 @@ namespace LiteNetLib
             lock (_flushLock)
             {
                 foreach (var channel in _reliableOrderedChannels) channel?.SendNextPackets();
-                foreach (var channel in _reliableUnorderedChannels) channel?.SendNextPackets();
-                foreach (var channel in _reliableSequencedChannels) channel?.SendNextPackets();
+                //foreach (var channel in _reliableUnorderedChannels) channel?.SendNextPackets();
+                //foreach (var channel in _reliableSequencedChannels) channel?.SendNextPackets();
                 foreach (var channel in _sequencedChannels)  channel?.SendNextPackets();
-                foreach (var channel in _simpleChannels) channel?.SendNextPackets();
+                //foreach (var channel in _simpleChannels) channel?.SendNextPackets();
 
                 FlushMergePacket();
             }
