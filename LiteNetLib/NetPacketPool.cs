@@ -53,6 +53,7 @@ namespace LiteNetLib
                     //clear in not reallocated
                     Array.Clear(packet.RawData, 0, size);
                 }
+                packet.Size = size;
             }
             return packet;
         }

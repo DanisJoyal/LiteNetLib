@@ -14,6 +14,8 @@ namespace LiteNetLib.Utils
         {
             get { return _data; }
         }
+        
+        public int Length { get { return _dataSize; } }
 
         public int Position
         {
@@ -69,7 +71,13 @@ namespace LiteNetLib.Utils
         internal void SetSource(NetPacket packet)
         {
             Clear();
-            _data = packet.RawData;
+            if (packet.GetDataSize() > 0)
+            {
+                // Temp size on BenchmarkNet
+                _data = new byte[packet.GetDataSize()];
+                Array.Copy(packet.RawData, _data, packet.GetDataSize());
+            }
+            //_data = packet.RawData;
             _position = 0;
             _dataSize = packet.GetDataSize();
             _packet = packet; 

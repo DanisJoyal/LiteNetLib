@@ -12,10 +12,9 @@ namespace LiteNetLib
         private NetEndPoint _bufferNetEndPointv4;
 
         private Socket _udpSocketv6;
-        private Thread _threadv4;
-        private Thread _threadv6;
-        private bool _running;
-        private readonly object _receiveLock = new object();
+        private EndPoint _bufferEndPointv6;
+        private NetEndPoint _bufferNetEndPointv6;
+
         private readonly NetManager.OnMessageReceived _onMessageReceived;
 
         private static readonly IPAddress MulticastAddressV6 = IPAddress.Parse (NetConstants.MulticastGroupIPv6);
@@ -37,15 +36,6 @@ namespace LiteNetLib
             _onMessageReceived = onMessageReceived;
         }
 
-        private void ReceiveLogic(object state)
-        {
-            Socket socket = (Socket)state;
-            byte[] receiveBuffer = new byte[NetConstants.SocketBufferSize];
-
-            while(_running)
-                Receive(false, receiveBuffer);
-        }
-
         public void Receive(bool ipV6, byte[] receiveBuffer)
         {
             Socket socket = _udpSocketv4;
@@ -53,10 +43,12 @@ namespace LiteNetLib
             NetEndPoint bufferNetEndPoint = _bufferNetEndPointv4;
             int result;
 
-            //if (ipV6 == true)
-            //{
-                //socket = _udpSocketv6;
-            //}
+            if (ipV6 == true)
+            {
+                socket = _udpSocketv6;
+                bufferEndPoint = _bufferEndPointv6;
+                bufferNetEndPoint = _bufferNetEndPointv6;
+            }
 
             while (true)
             {
@@ -90,20 +82,14 @@ namespace LiteNetLib
                         return;
                     }
                     NetUtils.DebugWriteError("[R]Error code: {0} - {1}", (int)ex.SocketErrorCode, ex.ToString());
-                    lock (_receiveLock)
-                    {
-                        _onMessageReceived(null, 0, (int)ex.SocketErrorCode, bufferNetEndPoint);
-                    }
+                    _onMessageReceived(null, 0, (int)ex.SocketErrorCode, bufferNetEndPoint);
 
                     return;
                 }
 
                 //All ok!
                 NetUtils.DebugWrite(ConsoleColor.Blue, "[R]Received data from {0}, result: {1}", bufferNetEndPoint.ToString(), result);
-                lock (_receiveLock)
-                {
-                    _onMessageReceived(receiveBuffer, result, 0, bufferNetEndPoint);
-                }
+                _onMessageReceived(receiveBuffer, result, 0, bufferNetEndPoint);
             }
         }
 
@@ -133,11 +119,6 @@ namespace LiteNetLib
                 return false;
             }
             LocalPort = ((IPEndPoint) _udpSocketv4.LocalEndPoint).Port;
-            _running = true;
-            //_threadv4 = new Thread(ReceiveLogic);
-            //_threadv4.Name = "SocketThreadv4(" + LocalPort + ")";
-            //_threadv4.IsBackground = true;
-            //_threadv4.Start(_udpSocketv4);
 
             _bufferEndPointv4 = new IPEndPoint(_udpSocketv4.AddressFamily == AddressFamily.InterNetwork ? IPAddress.Any : IPAddress.IPv6Any, 0);
             _bufferNetEndPointv4 = new NetEndPoint((IPEndPoint)_bufferEndPointv4);
@@ -148,7 +129,7 @@ namespace LiteNetLib
                 return true;
 
             _udpSocketv6 = new Socket(AddressFamily.InterNetworkV6, SocketType.Dgram, ProtocolType.Udp);
-            _udpSocketv6.Blocking = true;
+            _udpSocketv6.Blocking = false;
             _udpSocketv6.ReceiveBufferSize = NetConstants.SocketBufferSize;
             _udpSocketv6.SendBufferSize = NetConstants.SocketBufferSize;
             //_udpSocketv6.Ttl = NetConstants.SocketTTL;
@@ -171,12 +152,10 @@ namespace LiteNetLib
                 {
                     // Unity3d throws exception - ignored
                 }
-
-                _threadv6 = new Thread(ReceiveLogic);
-                _threadv6.Name = "SocketThreadv6(" + LocalPort + ")";
-                _threadv6.IsBackground = true;
-                _threadv6.Start(_udpSocketv6);
             }
+
+            _bufferEndPointv6 = new IPEndPoint(_udpSocketv4.AddressFamily == AddressFamily.InterNetwork ? IPAddress.Any : IPAddress.IPv6Any, 0);
+            _bufferNetEndPointv6 = new NetEndPoint((IPEndPoint)_bufferEndPointv6);
 
             return true;
         }
@@ -282,19 +261,12 @@ namespace LiteNetLib
 
         public void Close()
         {
-            _running = false;
-
             //Close IPv4
             if (_udpSocketv4 != null)
             {
                 CloseSocket(_udpSocketv4);
                 _udpSocketv4 = null;
             }
-            if (Thread.CurrentThread != _threadv4)
-            {
-                _threadv4.Join();
-            }
-            _threadv4 = null;
 
             //No ipv6
             if (_udpSocketv6 == null)
@@ -306,11 +278,6 @@ namespace LiteNetLib
                 CloseSocket(_udpSocketv6);
                 _udpSocketv6 = null;
             }
-            if (Thread.CurrentThread != _threadv6)
-            {
-                _threadv6.Join();
-            }
-            _threadv6 = null;
         }
     }
 }

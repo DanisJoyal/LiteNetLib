@@ -447,14 +447,11 @@ namespace LiteNetLib
                 }
 
                 //Process acks
-                _peers.UpdateClone();
-                lock (_peers.PeersArrayClone)
+                lock (_peers)
                 {
-                    NetPeer[] arrayPeers = _peers.PeersArrayClone;
-                    int peersCount = _peers.CloneCount;
-                    for (int i = 0; i < peersCount; i++)
+                    for (int i = 0; i < _peers.Count; i++)
                     {
-                        NetPeer netPeer = arrayPeers[i];
+                        NetPeer netPeer = _peers[i];
                         if (netPeer.ConnectionState != ConnectionState.Disconnected)
                         {
                             netPeer.Update(nextUpdateTime);
@@ -819,13 +816,11 @@ namespace LiteNetLib
         /// <param name="channel">Set the channel wanted. See NetConstants.MultiChannelSize</param>
         public void SendToAll(byte[] data, int start, int length, DeliveryMethod options, int channel = 0)
         {
-            _peers.UpdateClone();
-            lock (_peers.PeersArrayClone)
+            lock (_peers)
             {
-                NetPeer[] arrayPeers = _peers.PeersArrayClone;
-                for (int i = 0; i < _peers.CloneCount; i++)
+                for (int i = 0; i < _peers.Count; i++)
                 {
-                    arrayPeers[i].Send(data, start, length, options);
+                    _peers[i].Send(data, start, length, options);
                 }
             }
         }
@@ -865,13 +860,11 @@ namespace LiteNetLib
         /// <param name="channel">Set the channel wanted. See NetConstants.MultiChannelSize</param>
         public void SendToAll(byte[] data, int start, int length, DeliveryMethod options, NetPeer excludePeer, int channel = 0)
         {
-            _peers.UpdateClone();
-            lock (_peers.PeersArrayClone)
+            lock (_peers)
             {
-                NetPeer[] arrayPeers = _peers.PeersArrayClone;
-                for (int i = 0; i < _peers.CloneCount; i++)
+                for (int i = 0; i < _peers.Count; i++)
                 {
-                    var netPeer = arrayPeers[i];
+                    var netPeer = _peers[i];
                     if (netPeer != excludePeer)
                     {
                         netPeer.Send(data, start, length, options);
@@ -1011,13 +1004,11 @@ namespace LiteNetLib
         /// </summary>
         public void Flush()
         {
-            _peers.UpdateClone();
-            lock (_peers.PeersArrayClone)
+            lock (_peers)
             {
-                NetPeer[] arrayPeers = _peers.PeersArrayClone;
-                for (int i = 0; i < _peers.CloneCount; i++)
+                for (int i = 0; i < _peers.Count; i++)
                 {
-                    arrayPeers[i].Flush();
+                    _peers[i].Flush();
                 }
             }
         }
