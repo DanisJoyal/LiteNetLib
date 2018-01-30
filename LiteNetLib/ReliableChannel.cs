@@ -108,7 +108,7 @@ namespace LiteNetLib
 
             byte[] acksData = packet.RawData;
             NetUtils.DebugWrite("[PA]AcksStart: {0}", ackWindowStart);
-            Monitor.Enter(_pendingPackets);
+            //Monitor.Enter(_pendingPackets);
             PendingPacket pendingPacket = _headPendingPacket;
             PendingPacket prevPacket = null;
             while (pendingPacket != null)
@@ -131,9 +131,6 @@ namespace LiteNetLib
                 int currentBit = idx % BitsInByte;
                 if ((acksData[currentByte] & (1 << currentBit)) == 0)
                 {
-#if STATS_ENABLED || DEBUG
-                    _peer.Statistics.PacketLoss++;
-#endif
                     //Skip false ack
                     prevPacket = pendingPacket;
                     pendingPacket = pendingPacket.Next;
@@ -177,7 +174,7 @@ namespace LiteNetLib
                 packetToClear.Clear();
                 NetUtils.DebugWrite("[PA]Removing reliableInOrder ack: {0} - true", seq);
             }
-            Monitor.Exit(_pendingPackets);
+            //Monitor.Exit(_pendingPackets);
         }
 
         public void AddToQueue(NetPacket packet)
@@ -194,13 +191,13 @@ namespace LiteNetLib
             {
                 _mustSendAcks = false;
                 NetUtils.DebugWrite("[RR]SendAcks");
-                Monitor.Enter(_outgoingAcks);
+                //Monitor.Enter(_outgoingAcks);
                 _peer.SendRawData(_outgoingAcks);
-                Monitor.Exit(_outgoingAcks);
+                //Monitor.Exit(_outgoingAcks);
             }
 
             long currentTime = DateTime.UtcNow.Ticks;
-            Monitor.Enter(_pendingPackets);
+            //Monitor.Enter(_pendingPackets);
             //get packets from queue
             Monitor.Enter(_outgoingPackets);
             while (_outgoingPackets.Count > 0)
@@ -232,9 +229,10 @@ namespace LiteNetLib
             //if no pending packets return
             if (_headPendingPacket == null)
             {
-                Monitor.Exit(_pendingPackets);
+                //Monitor.Exit(_pendingPackets);
                 return;
             }
+
             //send
             double resendDelay = _peer.ResendDelay;
             PendingPacket currentPacket = _headPendingPacket;
@@ -243,18 +241,21 @@ namespace LiteNetLib
                 if (currentPacket.Sended) //check send time
                 {
                     double packetHoldTime = currentTime - currentPacket.TimeStamp;
-                    if (packetHoldTime < resendDelay * TimeSpan.TicksPerMillisecond)
+                    if (packetHoldTime < resendDelay * TimeSpan.TicksPerMillisecond * (2 + _outgoingPackets.Count * _outgoingPackets.Count))
                     {
                         continue;
                     }
                     NetUtils.DebugWrite("[RC]Resend: {0} > {1}", (int)packetHoldTime, resendDelay);
+#if STATS_ENABLED || DEBUG
+                    _peer.Statistics.PacketLoss++;
+#endif
                 }
 
                 currentPacket.TimeStamp = currentTime;
                 currentPacket.Sended = true;
                 _peer.SendRawData(currentPacket.Packet);
             } while ((currentPacket = currentPacket.Next) != null);
-            Monitor.Exit(_pendingPackets);
+            //Monitor.Exit(_pendingPackets);
         }
 
         //Process incoming packet
@@ -292,7 +293,7 @@ namespace LiteNetLib
             }
 
             //If very new - move window
-            Monitor.Enter(_outgoingAcks);
+            //Monitor.Enter(_outgoingAcks);
             int ackIdx;
             int ackByte;
             int ackBit;
@@ -315,20 +316,20 @@ namespace LiteNetLib
 
             //Final stage - process valid packet
             //trigger acks send
-            _mustSendAcks = true;
+            //_mustSendAcks = true;
             ackIdx = packet.Sequence % _windowSize;
             ackByte = ackIdx / BitsInByte;
             ackBit = ackIdx % BitsInByte;
             if ((_outgoingAcks.RawData[ackByte] & (1 << ackBit)) != 0)
             {
                 NetUtils.DebugWrite("[RR]ReliableInOrder duplicate");
-                Monitor.Exit(_outgoingAcks);
+                //Monitor.Exit(_outgoingAcks);
                 return false;
             }
 
             //save ack
             _outgoingAcks.RawData[ackByte] |= (byte)(1 << ackBit);
-            Monitor.Exit(_outgoingAcks);
+            //Monitor.Exit(_outgoingAcks);
 
             //detailed check
             if (packet.Sequence == _remoteSequence)
