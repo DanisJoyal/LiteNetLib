@@ -147,6 +147,20 @@ namespace LiteNetLib
         public int MaxConnectAttempts = 10;
 
         /// <summary>
+        /// Index of the maximum size of MTU.
+        /// -1 => Autodetect (cost some send packets to find the maximum size, be careful if there is a lot of clients)
+        /// 0 => 576 - MaxUdpHeaderSize,  //Internet Path MTU for X.25 (RFC 879)
+        /// 1 => 1492 - MaxUdpHeaderSize, //Ethernet with LLC and SNAP, PPPoE (RFC 1042)
+        /// 2 => 1500 - MaxUdpHeaderSize, //Ethernet II (RFC 1191)
+        /// 3 => 4352 - MaxUdpHeaderSize, //FDDI
+        /// 4 => 4464 - MaxUdpHeaderSize, //Token ring
+        /// 5 => 7981 - MaxUdpHeaderSize  //WLAN
+        /// Where MaxUdpHeaderSize = 68
+        /// </summary>
+        public int MtuStartIdx = 1;
+
+
+        /// <summary>
         /// Maximum connection attempts before client stops and call disconnect event.
         /// </summary>
         public string PasscodeKey = "";
