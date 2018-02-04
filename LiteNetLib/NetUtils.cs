@@ -187,9 +187,14 @@ namespace LiteNetLib
             }
         }
 
+        internal static ushort IncrementSequenceNumber(ushort number, int by)
+        {
+            return (ushort)(((int)number + by) % NetConstants.MaxSequence);
+        }
+
         internal static int RelativeSequenceNumber(int number, int expected)
         {
-            return ((number - expected) + NetConstants.MaxSequence) % NetConstants.MaxSequence;
+            return (number - expected + NetConstants.MaxSequence + NetConstants.HalfMaxSequence) % NetConstants.MaxSequence - NetConstants.HalfMaxSequence;
         }
 
         private static readonly object DebugLogLock = new object();

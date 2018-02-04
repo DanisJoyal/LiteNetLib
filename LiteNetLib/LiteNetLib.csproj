@@ -33,6 +33,7 @@
     <WarningLevel>4</WarningLevel>
     <DocumentationFile>bin\Release\LiteNetLib.xml</DocumentationFile>
     <NoWarn>1591</NoWarn>
+    <DefineConstants>STATS_ENABLED</DefineConstants>
   </PropertyGroup>
   <PropertyGroup>
     <StartupObject />

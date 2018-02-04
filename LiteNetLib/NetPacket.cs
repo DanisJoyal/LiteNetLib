@@ -41,6 +41,12 @@ namespace LiteNetLib
         public const int SequencedHeaderSize = HeaderSize + _SequenceSize;
         public const int FragmentHeaderSize = _FragmentIdSize + _FragmentPartSize + _FragmentTotalSize;
 
+        private PacketProperty _cachedProperty;
+        private int _cachedDataSize;
+        private int _cachedChannel;
+        private bool _cachedIsFragmented;
+        private ushort _cachedSequence;
+
         //Header
         private const int _PropertySize = 1;
         public PacketProperty Property
@@ -48,8 +54,7 @@ namespace LiteNetLib
             get { return _cachedProperty; }
             set
             {
-                RawData[Size - _PropertySize] = (byte)((RawData[Size - _PropertySize] & 0x80) | ((byte)value & 0x1F));
-                UpdateCache();
+                _cachedProperty = value;
 #if DEBUG_MESSAGES
                 // Debug purpose: Avoid mismatch between client and server. Can be removed.
                 RawData[Size - _PropertySize] |= (byte)(NetConstants.MultiChannelSize << 5);
@@ -61,8 +66,8 @@ namespace LiteNetLib
 
         public ushort Sequence
         {
-            get { return BitConverter.ToUInt16(RawData, Size - HeaderSize - sizeof(ushort)); }
-            set { FastBitConverter.GetBytes(RawData, Size - HeaderSize - sizeof(ushort), value); }
+            get { return _cachedSequence; }
+            set { _cachedSequence = value;  }
         }
 
         public int Channel
@@ -121,17 +126,36 @@ namespace LiteNetLib
         //Data
         public byte[] RawData;
         private int _size;
-        public int Size { get { return _size; } set { _size = value; UpdateCache(); } }
-
-        private PacketProperty _cachedProperty;
-        private int _cachedDataSize;
-        private bool _cachedIsFragmented;
+        public int Size {
+            get { return _size; }
+            set
+            {
+                // Flush previous data
+                RawData[Size - _PropertySize] = 0;
+                if (GetHeaderSize(_cachedProperty) == NetPacket.SequencedHeaderSize)
+                {
+                    FastBitConverter.GetBytes(RawData, Size - HeaderSize - sizeof(ushort), 0);
+                }
+                    
+                _size = value;
+                RawData[Size - _PropertySize] = (byte)((RawData[Size - _PropertySize] & 0x80) | ((byte)_cachedProperty & 0x1F));
+                if (_cachedIsFragmented)
+                    RawData[Size - _PropertySize] |= 0x80; //set first bit
+                else
+                    RawData[Size - _PropertySize] &= 0x7F; //unset first bit
+                _cachedDataSize = Size - GetHeaderSize();
+                if(GetHeaderSize(_cachedProperty) == NetPacket.SequencedHeaderSize)
+                    FastBitConverter.GetBytes(RawData, Size - HeaderSize - sizeof(ushort), _cachedSequence);
+            }
+        }
 
         public void UpdateCache()
         {
             _cachedProperty = (PacketProperty)(RawData[Size - _PropertySize] & 0x1F);
             _cachedDataSize = Size - GetHeaderSize();
             _cachedIsFragmented = (RawData[Size - _PropertySize] & 0x80) != 0;
+            if (Size > HeaderSize + sizeof(ushort))
+                _cachedSequence = BitConverter.ToUInt16(RawData, Size - HeaderSize - sizeof(ushort));
         }
 
         private NetPacketPool _packetPool;
