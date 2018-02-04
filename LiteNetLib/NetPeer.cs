@@ -833,6 +833,7 @@ namespace LiteNetLib
                     NetUtils.DebugWrite("Send merged: " + _mergePos + ", count: " + _mergeCount);
                     _mergeData.Size = NetConstants.HeaderSize + _mergePos;
                     _mergeData.Property = PacketProperty.Merged;
+                    _mergeData.Prepare();
                     _netManager.SendRaw(_mergeData.RawData, 0, _mergeData.Size, _remoteEndPoint);
 #if STATS_ENABLED
                     Statistics.PacketsSent++;
@@ -855,6 +856,8 @@ namespace LiteNetLib
 
         internal void SendRawData(NetPacket packet)
         {
+            packet.Prepare();
+
             //2 - merge byte + minimal packet size + datalen(ushort)
             if (_netManager.MergeEnabled &&
                 CanMerge(packet.Property))
@@ -908,6 +911,7 @@ namespace LiteNetLib
             }
             if (_connectionState == ConnectionState.ShutdownRequested)
             {
+                _shutdownPacket.Prepare();
                 _netManager.SendRaw(_shutdownPacket.RawData, 0, _shutdownPacket.Size, _remoteEndPoint);
                 return;
             }

@@ -244,6 +244,7 @@ namespace LiteNetLib
 
         internal bool SendRawAndRecycle(NetPacket packet, NetEndPoint remoteEndPoint)
         {
+            packet.Prepare();
             var result = SendRaw(packet.RawData, 0, packet.Size, remoteEndPoint);
             NetPacketPool.Recycle(packet);
             return result;

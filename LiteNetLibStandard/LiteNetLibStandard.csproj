@@ -40,12 +40,13 @@
     <Compile Include="..\LiteNetLib\NetPeer.cs" Link="NetPeer.cs" />
     <Compile Include="..\LiteNetLib\NetPeerCollection.cs" Link="NetPeerCollection.cs" />
     <Compile Include="..\LiteNetLib\NetSocket.cs" Link="NetSocket.cs" />
+    <Compile Include="..\LiteNetLib\NetTime.cs" Link="NetTime.cs" />
     <Compile Include="..\LiteNetLib\NetUtils.cs" Link="NetUtils.cs" />
     <Compile Include="..\LiteNetLib\ReliableChannel.cs" Link="ReliableChannel.cs" />
     <Compile Include="..\LiteNetLib\ReliableSequencedChannel.cs" Link="ReliableSequencedChannel.cs" />
     <Compile Include="..\LiteNetLib\SequencedChannel.cs" Link="SequencedChannel.cs" />
     <Compile Include="..\LiteNetLib\SimpleChannel.cs" Link="SimpleChannel.cs" />
-	<Compile Include="..\LiteNetLib\SwitchQueue.cs" Link="SwitchQueue.cs" />
+	  <Compile Include="..\LiteNetLib\SwitchQueue.cs" Link="SwitchQueue.cs" />
     <Compile Include="..\LiteNetLib\Utils\FastBitConverter.cs" Link="Utils\FastBitConverter.cs" />
     <Compile Include="..\LiteNetLib\Utils\INetSerializable.cs" Link="Utils\INetSerializable.cs" />
     <Compile Include="..\LiteNetLib\Utils\NetDataReader.cs" Link="Utils\NetDataReader.cs" />
