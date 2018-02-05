@@ -16,6 +16,8 @@ namespace LiteNetLib
         /// </summary>
         public static double Now { get { return (double)(Stopwatch.GetTimestamp() - s_timeInitialized) * s_dInvFreq; } }
 
+        public static long NowMs { get { return (Stopwatch.GetTimestamp() - s_timeInitialized) * 1000 / Stopwatch.Frequency; } }
+
         public static int ToMs(double time)
         {
             return (int)(time * 1000.0);

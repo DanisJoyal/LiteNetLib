@@ -27,18 +27,18 @@ namespace LiteNetLib
     {
         //Ping and RTT
         private int _ping;
-        private double _rtt;
-        private double _avgRtt;
+        private long _rtt;
+        private long _avgRtt;
         private int _rttCount;
         private ushort _pingSequence;
         private ushort _remotePingSequence;
-        private double _resendDelay = 0.027;
+        private long _resendDelay = 27;
 
         private int _pingSendTimer;
         private const int RttResetDelay = 1000;
         private int _rttResetTimer;
 
-        private double _pingTimeStart;
+        private long _pingTimeStart;
         private int _timeSinceLastPacket;
 
         //Common            
@@ -154,12 +154,12 @@ namespace LiteNetLib
             return getReliableOrderedChannel(channel).PacketsInQueue;
         }
 
-        internal double AvgRtt
+        internal long AvgRtt
         {
             get { return _avgRtt; }
         }
 
-        internal double ResendDelay
+        internal long ResendDelay
         {
             get { return _resendDelay; }
         }
@@ -215,8 +215,8 @@ namespace LiteNetLib
                 _finishMtu = true;
             }
 
-            _avgRtt = 0.0;
-            _rtt = 0.0;
+            _avgRtt = 0;
+            _rtt = 0;
             _pingSendTimer = 0;
 
             _reliableOrderedChannels = new ReliableChannel[_channelCapacity];
@@ -554,22 +554,22 @@ namespace LiteNetLib
             }
         }
 
-        private void UpdateRoundTripTime(double roundTripTime)
+        private void UpdateRoundTripTime(long roundTripTime)
         {
             //Calc average round trip time
             _rtt += roundTripTime;
             _rttCount++;
             _avgRtt = _rtt/_rttCount;
 
-            if (_avgRtt <= 0.0)
+            if (_avgRtt <= 0)
             {
-                _avgRtt = 0.025; // 25 ms
-                _rtt = 0.0;
+                _avgRtt = 25; // 25 ms
+                _rtt = 0;
                 _rttCount = 0;
             }
             
             //recalc resend delay
-            _resendDelay = 0.025 + (_avgRtt * 2.1); // 25 ms + double rtt
+            _resendDelay = 25 + (long)((float)_avgRtt * 2.1); // 25 ms + double rtt
         }
 
         internal void AddIncomingPacket(NetPacket p)
@@ -745,9 +745,9 @@ namespace LiteNetLib
                         break;
                     }
                     _pingSequence = packet.Sequence;
-                    double rtt = NetTime.Now - _pingTimeStart;
+                    long rtt = NetTime.NowMs - _pingTimeStart;
                     UpdateRoundTripTime(rtt);
-                    NetUtils.DebugWrite("[PP]Ping: {0}", NetTime.ToMs(rtt));
+                    NetUtils.DebugWrite("[PP]Ping: {0}", rtt);
                     packet.Recycle();
                     break;
 
@@ -953,7 +953,7 @@ namespace LiteNetLib
                 CreateAndSend(PacketProperty.Ping, _pingSequence);
 
                 //reset timer
-                _pingTimeStart = NetTime.Now;
+                _pingTimeStart = NetTime.NowMs;
             }
 
             //RTT - round trip time
@@ -963,7 +963,7 @@ namespace LiteNetLib
                 _rttResetTimer = 0;
                 //Rtt update
                 _rtt = _avgRtt;
-                _ping = NetTime.ToMs(_avgRtt);
+                _ping = (int)_avgRtt;
                 _netManager.ConnectionLatencyUpdated(this, _ping);
                 _rttCount = 1;
             }
