@@ -12,6 +12,7 @@ namespace LiteNetLib
             public long TimeStamp;
             public int SentCount;
             public PendingPacket Next;
+            public int idx;
 
             public override string ToString()
             {
@@ -26,7 +27,7 @@ namespace LiteNetLib
             }
         }
 
-        private readonly Queue<NetPacket> _outgoingPackets;
+        private readonly List<NetPacket> _outgoingPackets;
         private readonly NetPacket _outgoingAcks;            //for send acks
         private readonly PendingPacket[] _pendingPackets;    //for unacked packets and duplicates
         private readonly NetPacket[] _receivedPackets;       //for order
@@ -57,11 +58,12 @@ namespace LiteNetLib
             _ordered = ordered;
             _channel = channel;
 
-            _outgoingPackets = new Queue<NetPacket>(_windowSize);
+            _outgoingPackets = new List<NetPacket>(_windowSize);
             _pendingPackets = new PendingPacket[_windowSize];
             for (int i = 0; i < _pendingPackets.Length; i++)
             {
                 _pendingPackets[i] = new PendingPacket();
+                _pendingPackets[i].idx = i;
             }
 
             if (_ordered)
@@ -147,7 +149,7 @@ namespace LiteNetLib
         public void AddToQueue(NetPacket packet)
         {
             Monitor.Enter(_outgoingPackets);
-            _outgoingPackets.Enqueue(packet);
+            _outgoingPackets.Add(packet);
             Monitor.Exit(_outgoingPackets);
         }
 
@@ -197,16 +199,23 @@ namespace LiteNetLib
             //Monitor.Enter(_pendingPackets);
             //get packets from queue
             Monitor.Enter(_outgoingPackets);
+
+            int relate = _headPendingPacket == null ? -1 : _headPendingPacket.idx - 1;
+            if (relate < 0)
+                relate += _windowSize;
+
             PendingPacket tailPendingPacket = _headPendingPacket;
             while (tailPendingPacket != null && tailPendingPacket.Next != null)
                 tailPendingPacket = tailPendingPacket.Next;
-            while (_outgoingPackets.Count > 0)
+            int packetUsed = 0;
+            int nextPacket = tailPendingPacket == null ? 0 : tailPendingPacket.idx + 1;
+            foreach (NetPacket packet in _outgoingPackets)
             {
-                int relate = _headPendingPacket == null ? 0 : NetUtils.RelativeSequenceNumber(_localSequence, _headPendingPacket.Packet.Sequence);
-                if (relate < _windowSize)
+                if (tailPendingPacket == null || tailPendingPacket.idx == relate)
                 {
-                    PendingPacket pendingPacket = _pendingPackets[_localSequence % _windowSize];
-                    pendingPacket.Packet = _outgoingPackets.Dequeue();
+                    PendingPacket pendingPacket = _pendingPackets[nextPacket++ % _windowSize];
+                    pendingPacket.Packet = packet;
+                    packetUsed++;
                     pendingPacket.Packet.Sequence = (ushort)_localSequence;
                     if(_headPendingPacket == null)
                         _headPendingPacket = pendingPacket;
@@ -220,6 +229,8 @@ namespace LiteNetLib
                     break;
                 }
             }
+            _outgoingPackets.RemoveRange(0, packetUsed);
+
             Monitor.Exit(_outgoingPackets);
 
             ResendPackets();
@@ -238,7 +249,7 @@ namespace LiteNetLib
             }
 
             //send
-            long resendDelay = _peer.ResendDelay;
+            long resendDelay = _peer.ResendDelay + _peer.NetManager.AvgUpdateTime;
             PendingPacket currentPacket = _headPendingPacket;
             int countPack = 0;
             do

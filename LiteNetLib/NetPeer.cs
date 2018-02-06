@@ -33,6 +33,7 @@ namespace LiteNetLib
         private ushort _pingSequence;
         private ushort _remotePingSequence;
         private long _resendDelay = 27;
+        private bool _pingMustSend;
 
         private int _pingSendTimer;
         private const int RttResetDelay = 1000;
@@ -45,7 +46,6 @@ namespace LiteNetLib
         private readonly NetEndPoint _remoteEndPoint;
         private readonly NetManager _netManager;
         private readonly NetPacketPool _packetPool;
-        private readonly object _flushLock = new object();
         private readonly object _sendLock = new object();
 
         //Channels
@@ -218,6 +218,7 @@ namespace LiteNetLib
             _avgRtt = 0;
             _rtt = 0;
             _pingSendTimer = 0;
+            _pingMustSend = false;
 
             _reliableOrderedChannels = new ReliableChannel[_channelCapacity];
             _reliableUnorderedChannels = new ReliableChannel[_channelCapacity];
@@ -734,7 +735,7 @@ namespace LiteNetLib
                     packet.Recycle();
 
                     //send
-                    CreateAndSend(PacketProperty.Pong, _remotePingSequence);
+                    _pingMustSend = true;
                     break;
 
                 //If we get pong, calculate ping time and rtt
@@ -887,17 +888,22 @@ namespace LiteNetLib
         /// </summary>
         public void Flush()
         {
-            lock (_flushLock)
-            {
-                foreach (var channel in _reliableOrderedChannels) channel?.SendNextPackets();
-                //foreach (var channel in _reliableUnorderedChannels) channel?.SendNextPackets();
-                //foreach (var channel in _reliableSequencedChannels) channel?.SendNextPackets();
-                foreach (var channel in _sequencedChannels)  channel?.SendNextPackets();
-                //foreach (var channel in _simpleChannels) channel?.SendNextPackets();
+            foreach (var channel in _reliableOrderedChannels) channel?.SendNextPackets();
+            //foreach (var channel in _reliableUnorderedChannels) channel?.SendNextPackets();
+            //foreach (var channel in _reliableSequencedChannels) channel?.SendNextPackets();
+            foreach (var channel in _sequencedChannels)  channel?.SendNextPackets();
+            //foreach (var channel in _simpleChannels) channel?.SendNextPackets();
 
-                FlushMergePacket();
+            FlushMergePacket();
+        }
+
+        internal void ProcessPong(int deltaTime)
+        {
+            if(_pingMustSend == true)
+            {
+                _pingMustSend = false;
+                CreateAndSend(PacketProperty.Pong, _remotePingSequence);
             }
-            return;
         }
 
         internal void Update(int deltaTime)

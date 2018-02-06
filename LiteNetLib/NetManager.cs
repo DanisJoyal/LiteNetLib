@@ -69,6 +69,9 @@ namespace LiteNetLib
 
         internal readonly NetPacketPool NetPacketPool;
 
+        internal long AvgUpdateTime;
+        private long[] _updateTimeFilter;
+
         //config section
         /// <summary>
         /// Enable messages receiving without connection. (with SendUnconnectedMessage method)
@@ -226,6 +229,8 @@ namespace LiteNetLib
             _peers = new NetPeerCollection(maxConnections);
             _connectingPeers = new HashSet<NetEndPoint>();
             _maxConnections = maxConnections;
+            _updateTimeFilter = new long[3];
+
             // Precreate all needed Merge Packets
             for (int i = 0; i < maxConnections * 3; ++i)
             {
@@ -417,14 +422,10 @@ namespace LiteNetLib
         //Update function
         private void UpdateLogic()
         {
-            SkipCount = 0;
-            int nextUpdateTime = UpdateTime;
-            Stopwatch timePerRun = new Stopwatch();
-            NetPacket receiveBuffer = NetPacketPool.Get(PacketProperty.Sequenced, 0, NetConstants.SocketBufferSize);
+            long startNowMs = NetTime.NowMs;
+            NetPacket receiveBuffer = NetPacketPool.Get(PacketProperty.Sequenced, 0, NetConstants.MaxPacketSize);
             while (IsRunning)
             {
-                //timePerRun.Reset();
-                //timePerRun.Start();
 #if DEBUG
                 if (SimulateLatency)
                 {
@@ -459,21 +460,21 @@ namespace LiteNetLib
                             _peers.Remove(netPeer);
                         }
                     }
-                }
 
-                //Process acks
-                lock (_peers)
-                {
+                    //Process acks
                     for (int i = 0; i < _peers.Count; i++)
                     {
                         NetPeer netPeer = _peers[i];
-                        if (netPeer.ConnectionState != ConnectionState.Disconnected)
-                        {
-                            netPeer.Update(nextUpdateTime);
+                        netPeer.Update(UpdateTime);
 #if STATS_ENABLED
-                            totalPacketLoss += netPeer.Statistics.PacketLoss;
+                        totalPacketLoss += netPeer.Statistics.PacketLoss;
 #endif
-                        }
+                    }
+
+                    //Process ping
+                    for (int i = 0; i < _peers.Count; i++)
+                    {
+                        _peers[i].ProcessPong(UpdateTime);
                     }
                 }
 
@@ -482,25 +483,15 @@ namespace LiteNetLib
 #if STATS_ENABLED
                 Statistics.PacketLoss = totalPacketLoss;
 #endif
-                //int totalTimeToRun = (int)timePerRun.ElapsedMilliseconds;
-                //int sleepTime = UpdateTime - totalTimeToRun;
-                //if (sleepTime > 0)
-                //{
-                //    Thread.Sleep(sleepTime);
-                //}
-                //else
-                //{
-                //    ++SkipCount;
-                //    if(_peers.Count < 5)
-                //        Thread.Sleep(5);    // In few client mode, dont skip
-                //}
-                //timePerRun.Stop();
-                //if (_peers.Count < 5)
-                //    Thread.Sleep(10);
-                //else
-                //    Thread.Sleep(1);
                 Thread.Sleep(UpdateTime);
-                nextUpdateTime = UpdateTime;
+
+                long currentNowMs = NetTime.NowMs;
+                long elapsedNowMs = currentNowMs - startNowMs;
+                startNowMs = currentNowMs;
+                AvgUpdateTime = (long)((elapsedNowMs * 6.0f + _updateTimeFilter[0] * 3.0f + _updateTimeFilter[1] * 2.0f + _updateTimeFilter[2] * 1.0f) / 12.0f);
+                _updateTimeFilter[2] = _updateTimeFilter[1];
+                _updateTimeFilter[1] = _updateTimeFilter[0];
+                _updateTimeFilter[0] = elapsedNowMs;
             }
         }
         
