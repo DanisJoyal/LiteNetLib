@@ -226,6 +226,16 @@ namespace LiteNetLib
         public bool EnableSimpleChannel = false;
 
         /// <summary>
+        /// Activate Simple channel
+        /// </summary>
+        public bool EnableIPv4 = true;
+
+        /// <summary>
+        /// Activate Simple channel
+        /// </summary>
+        public bool EnableIPv6 = false;
+
+        /// <summary>
         /// NetManager constructor with maxConnections = 1 (usable for client)
         /// </summary>
         /// <param name="listener">Network events listener</param>
@@ -502,6 +512,7 @@ namespace LiteNetLib
                 }
 
                 _socket.Receive(false, receiveBuffer.RawData);
+                _socket.Receive(true, receiveBuffer.RawData);
 
 #if STATS_ENABLED
                 Statistics.PacketLoss = totalPacketLoss;
@@ -925,7 +936,7 @@ namespace LiteNetLib
             _netEventsQueue.Clear();
             IPAddress ipv4 = NetEndPoint.GetFromString(addressIPv4);
             IPAddress ipv6 = NetEndPoint.GetFromString(addressIPv6);
-            if (!_socket.Bind(ipv4, ipv6, port, ReuseAddress))
+            if (!_socket.Bind(ipv4, ipv6, port, ReuseAddress, EnableIPv4, EnableIPv6))
                 return false;
             IsRunning = true;
             _logicThread.Start();
@@ -943,7 +954,7 @@ namespace LiteNetLib
                 return false;
             }
             _netEventsQueue.Clear();
-            if (!_socket.Bind(IPAddress.Any, IPAddress.IPv6Any, port, ReuseAddress))
+            if (!_socket.Bind(IPAddress.Any, IPAddress.IPv6Any, port, ReuseAddress, EnableIPv4, EnableIPv6))
                 return false;
             IsRunning = true;
             _logicThread.Start();

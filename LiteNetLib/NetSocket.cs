@@ -27,7 +27,7 @@ namespace LiteNetLib
 #if UNITY_4 || UNITY_5 || UNITY_5_3_OR_NEWER
             IPv6Support = Socket.SupportsIPv6;
 #else
-            IPv6Support = false; //Socket.OSSupportsIPv6;
+            IPv6Support = Socket.OSSupportsIPv6;
 #endif
         }
 
@@ -38,9 +38,9 @@ namespace LiteNetLib
 
         public void Receive(bool ipV6, byte[] receiveBuffer)
         {
-            Socket socket = _udpSocketv4;
-            EndPoint bufferEndPoint = _bufferEndPointv4;
-            NetEndPoint bufferNetEndPoint = _bufferNetEndPointv4;
+            Socket socket;
+            EndPoint bufferEndPoint;
+            NetEndPoint bufferNetEndPoint;
             int result;
 
             if (ipV6 == true)
@@ -48,6 +48,12 @@ namespace LiteNetLib
                 socket = _udpSocketv6;
                 bufferEndPoint = _bufferEndPointv6;
                 bufferNetEndPoint = _bufferNetEndPointv6;
+            }
+            else
+            {
+                socket = _udpSocketv4;
+                bufferEndPoint = _bufferEndPointv4;
+                bufferNetEndPoint = _bufferNetEndPointv4;
             }
 
             while (true)
@@ -93,39 +99,41 @@ namespace LiteNetLib
             }
         }
 
-        public bool Bind(IPAddress addressIPv4, IPAddress addressIPv6, int port, bool reuseAddress)
+        public bool Bind(IPAddress addressIPv4, IPAddress addressIPv6, int port, bool reuseAddress, bool enableIPv4, bool enableIPv6)
         {
-            _udpSocketv4 = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-            _udpSocketv4.Blocking = false;
-            _udpSocketv4.ReceiveBufferSize = NetConstants.SocketBufferSize;
-            _udpSocketv4.SendBufferSize = NetConstants.SocketBufferSize;
-            _udpSocketv4.Ttl = NetConstants.SocketTTL;
-            if(reuseAddress)
-                _udpSocketv4.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+            if (enableIPv4)
+            {
+                _udpSocketv4 = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+                _udpSocketv4.Blocking = false;
+                _udpSocketv4.ReceiveBufferSize = NetConstants.SocketBufferSize;
+                _udpSocketv4.SendBufferSize = NetConstants.SocketBufferSize;
+                _udpSocketv4.Ttl = NetConstants.SocketTTL;
+                if (reuseAddress)
+                    _udpSocketv4.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
 #if !NETCORE
-            _udpSocketv4.DontFragment = true;
+                _udpSocketv4.DontFragment = true;
 #endif
-            try
-            {
-                _udpSocketv4.EnableBroadcast = true;
-            }
-            catch (SocketException e)
-            {
-                NetUtils.DebugWriteError("Broadcast error: {0}", e.ToString());
-            }
+                try
+                {
+                    _udpSocketv4.EnableBroadcast = true;
+                }
+                catch (SocketException e)
+                {
+                    NetUtils.DebugWriteError("Broadcast error: {0}", e.ToString());
+                }
 
-            if (!BindSocket(_udpSocketv4, new IPEndPoint(addressIPv4, port)))
-            {
-                return false;
+                if (!BindSocket(_udpSocketv4, new IPEndPoint(addressIPv4, port)))
+                {
+                    return false;
+                }
+                LocalPort = ((IPEndPoint)_udpSocketv4.LocalEndPoint).Port;
+
+                _bufferEndPointv4 = new IPEndPoint(_udpSocketv4.AddressFamily == AddressFamily.InterNetwork ? IPAddress.Any : IPAddress.IPv6Any, 0);
+                _bufferNetEndPointv4 = new NetEndPoint((IPEndPoint)_bufferEndPointv4);
             }
-            LocalPort = ((IPEndPoint) _udpSocketv4.LocalEndPoint).Port;
-
-            _bufferEndPointv4 = new IPEndPoint(_udpSocketv4.AddressFamily == AddressFamily.InterNetwork ? IPAddress.Any : IPAddress.IPv6Any, 0);
-            _bufferNetEndPointv4 = new NetEndPoint((IPEndPoint)_bufferEndPointv4);
-
 
             //Check IPv6 support
-            if (!IPv6Support)
+            if (!IPv6Support || enableIPv6 == false)
                 return true;
 
             _udpSocketv6 = new Socket(AddressFamily.InterNetworkV6, SocketType.Dgram, ProtocolType.Udp);
@@ -216,11 +224,11 @@ namespace LiteNetLib
             try
             {
                 int result = 0;
-                if (remoteEndPoint.EndPoint.AddressFamily == AddressFamily.InterNetwork)
+                if (_udpSocketv4 != null && remoteEndPoint.EndPoint.AddressFamily == AddressFamily.InterNetwork)
                 {
                     result = _udpSocketv4.SendTo(data, offset, size, SocketFlags.None, remoteEndPoint.EndPoint);
                 }
-                else if(IPv6Support)
+                else if(_udpSocketv6 != null)
                 {
                     result = _udpSocketv6.SendTo(data, offset, size, SocketFlags.None, remoteEndPoint.EndPoint);
                 }
