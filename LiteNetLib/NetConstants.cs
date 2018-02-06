@@ -47,7 +47,8 @@ namespace LiteNetLib
         public const ushort HalfMaxSequence = MaxSequence / 2;
         public const int MinPacketSize = 576 - MaxUdpHeaderSize;
 
-        public const int MultiChannelSize = 0;  // Number of bytes
+        public const int MultiChannelSize = 0;  // Number of byte in Header for channels
+        public const int MultiChannelCount = 1;  // Number of channels to initialize
         public const int HeaderSize = NetPacket.HeaderSize;
         public const int SequencedHeaderSize = NetPacket.SequencedHeaderSize;
         public const int FragmentHeaderSize = NetPacket.FragmentHeaderSize;

@@ -174,31 +174,39 @@ namespace LiteNetLib
         /// </summary>
         public readonly NetStatistics Statistics;
 
-        private const int _channelCapacity = NetConstants.MultiChannelSize == 2 ? ushort.MaxValue : NetConstants.MultiChannelSize == 1 ? 256 : 1;
-
         private ReliableChannel getReliableOrderedChannel(int index)
         {
-            return _reliableOrderedChannels[index% _channelCapacity] ?? (_reliableOrderedChannels[index % _channelCapacity] = new ReliableChannel(this, true, index % _channelCapacity));
+            if (NetConstants.MultiChannelSize == 0)
+                return _reliableOrderedChannels[0];
+            return _reliableOrderedChannels[index % NetConstants.MultiChannelCount];
         }
 
         private ReliableChannel getReliableUnorderedChannel(int index)
         {
-            return _reliableUnorderedChannels[index % _channelCapacity] ?? (_reliableUnorderedChannels[index % _channelCapacity] = new ReliableChannel(this, false, index % _channelCapacity));
+            if (NetConstants.MultiChannelSize == 0)
+                return _reliableUnorderedChannels[0];
+            return _reliableUnorderedChannels[index % NetConstants.MultiChannelCount];
         }
 
         private SequencedChannel getSequencedChannel(int index)
         {
-            return _sequencedChannels[index % _channelCapacity] ?? (_sequencedChannels[index % _channelCapacity] = new SequencedChannel(this, index % _channelCapacity));
+            if (NetConstants.MultiChannelSize == 0)
+                return _sequencedChannels[0];
+            return _sequencedChannels[index % NetConstants.MultiChannelCount];
         }
 
         private SimpleChannel getSimpleChannel(int index)
         {
-            return _simpleChannels[index % _channelCapacity] ?? (_simpleChannels[index % _channelCapacity] = new SimpleChannel(this, index % _channelCapacity));
+            if (NetConstants.MultiChannelSize == 0)
+                return _simpleChannels[0];
+            return _simpleChannels[index % NetConstants.MultiChannelCount];
         }
 
         private ReliableSequencedChannel getReliableSequencedChannel(int index)
         {
-            return _reliableSequencedChannels[index % _channelCapacity] ?? (_reliableSequencedChannels[index % _channelCapacity] = new ReliableSequencedChannel(this, index % _channelCapacity));
+            if (NetConstants.MultiChannelSize == 0)
+                return _reliableSequencedChannels[0];
+            return _reliableSequencedChannels[index % NetConstants.MultiChannelCount];
         }
 
         private NetPeer(NetManager netManager, NetEndPoint remoteEndPoint)
@@ -220,18 +228,21 @@ namespace LiteNetLib
             _pingSendTimer = 0;
             _pingMustSend = false;
 
-            _reliableOrderedChannels = new ReliableChannel[_channelCapacity];
-            _reliableUnorderedChannels = new ReliableChannel[_channelCapacity];
-            _sequencedChannels = new SequencedChannel[_channelCapacity];
-            _simpleChannels = new SimpleChannel[_channelCapacity];
-            _reliableSequencedChannels = new ReliableSequencedChannel[_channelCapacity];
+            _reliableOrderedChannels = new ReliableChannel[NetConstants.MultiChannelCount];
+            _reliableUnorderedChannels = new ReliableChannel[NetConstants.MultiChannelCount];
+            _sequencedChannels = new SequencedChannel[NetConstants.MultiChannelCount];
+            _simpleChannels = new SimpleChannel[NetConstants.MultiChannelCount];
+            _reliableSequencedChannels = new ReliableSequencedChannel[NetConstants.MultiChannelCount];
             
             // Initialise default channel
-            getReliableOrderedChannel(0);
-            getReliableUnorderedChannel(0);
-            getSequencedChannel(0);
-            getSimpleChannel(0);
-            getReliableSequencedChannel(0);
+            for(int i = 0; i < NetConstants.MultiChannelCount; ++i)
+            {
+                _reliableOrderedChannels[i] = new ReliableChannel(this, true, i);
+                _reliableUnorderedChannels[i] = new ReliableChannel(this, false, i);
+                _sequencedChannels[i] = new SequencedChannel(this, i);
+                _simpleChannels[i] = new SimpleChannel(this, i);
+                _reliableSequencedChannels[i] = new ReliableSequencedChannel(this, i);
+            }
 
             _holdedFragments = new Dictionary<ushort, IncomingFragments>();
 
@@ -888,11 +899,22 @@ namespace LiteNetLib
         /// </summary>
         public void Flush()
         {
-            foreach (var channel in _reliableOrderedChannels) channel?.SendNextPackets();
-            //foreach (var channel in _reliableUnorderedChannels) channel?.SendNextPackets();
-            //foreach (var channel in _reliableSequencedChannels) channel?.SendNextPackets();
-            foreach (var channel in _sequencedChannels)  channel?.SendNextPackets();
-            //foreach (var channel in _simpleChannels) channel?.SendNextPackets();
+            if (NetConstants.MultiChannelSize == 0)
+            {
+                _reliableOrderedChannels[0]?.SendNextPackets();
+                _reliableUnorderedChannels[0]?.SendNextPackets();
+                _reliableSequencedChannels[0]?.SendNextPackets();
+                _sequencedChannels[0]?.SendNextPackets();
+                _simpleChannels[0]?.SendNextPackets();
+            }
+            else
+            {
+                foreach (var channel in _reliableOrderedChannels) channel?.SendNextPackets();
+                foreach (var channel in _reliableUnorderedChannels) channel?.SendNextPackets();
+                foreach (var channel in _reliableSequencedChannels) channel?.SendNextPackets();
+                foreach (var channel in _sequencedChannels) channel?.SendNextPackets();
+                foreach (var channel in _simpleChannels) channel?.SendNextPackets();
+            }
 
             FlushMergePacket();
         }

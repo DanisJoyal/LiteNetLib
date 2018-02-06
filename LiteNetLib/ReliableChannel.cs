@@ -299,24 +299,23 @@ namespace LiteNetLib
             if (_mustSendAcksStartTimer <= 0)
                 _mustSendAcksStartTimer = NetTime.NowMs;
 
-            ushort seq = packet.Sequence;
-            if (seq >= NetConstants.MaxSequence)
+            if (packet.Sequence >= NetConstants.MaxSequence)
             {
                 NetUtils.DebugWrite("[RR]Bad sequence");
                 return false;
             }
 
-            _packetsToAcknowledge.Add(seq);
+            _packetsToAcknowledge.Add(packet.Sequence);
 
             // Check if its a duplicated packet
-            if (RelativeSequenceDiff(seq, _remoteSequence) < 0)
+            if (_ordered && RelativeSequenceDiff(packet.Sequence, _remoteSequence) < 0)
             {
                 // Its a duplicated packet
                 return false;
             }
 
             //detailed check
-            if (seq == _remoteSequence)
+            if (packet.Sequence == _remoteSequence)
             {
                 NetUtils.DebugWrite("[RR]ReliableInOrder packet succes");
                 _peer.AddIncomingPacket(packet);
@@ -349,14 +348,16 @@ namespace LiteNetLib
             //holded packet
             if (_ordered)
             {
-                if(_receivedPackets[seq % _windowSize] != null && _receivedPackets[seq % _windowSize].Sequence != seq)
-                    _receivedPackets[seq % _windowSize] = null;
-                _receivedPackets[seq % _windowSize] = packet;
+                // Doesnt matter if it overwrites multiple time the same packet
+                _receivedPackets[packet.Sequence % _windowSize] = packet;
             }
             else
             {
-                _earlyReceived[packet.Sequence % _windowSize] = true;
-                _peer.AddIncomingPacket(packet);
+                if (_earlyReceived[packet.Sequence % _windowSize] == false)
+                {
+                    _earlyReceived[packet.Sequence % _windowSize] = true;
+                    _peer.AddIncomingPacket(packet);
+                }
             }
 
             return true;
