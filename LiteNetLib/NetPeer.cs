@@ -5,6 +5,9 @@ using System;
 using System.Collections.Generic;
 using LiteNetLib.Utils;
 
+// fix the "Unreachable code detected" did by if(NetConstants.MultiChannelSize == 2)
+#pragma warning disable 0162
+
 namespace LiteNetLib
 {
     /// <summary>
@@ -53,7 +56,7 @@ namespace LiteNetLib
         private readonly ReliableChannel[] _reliableUnorderedChannels;
         private readonly SequencedChannel[] _sequencedChannels;
         private readonly SimpleChannel[] _simpleChannels;
-        private readonly ReliableSequencedChannel[] _reliableSequencedChannels;
+        //private readonly ReliableSequencedChannel[] _reliableSequencedChannels;
 
         //MTU
         private int _mtu = NetConstants.PossibleMtu[0];
@@ -204,9 +207,10 @@ namespace LiteNetLib
 
         private ReliableSequencedChannel getReliableSequencedChannel(int index)
         {
-            if (NetConstants.MultiChannelSize == 0)
-                return _reliableSequencedChannels[0];
-            return _reliableSequencedChannels[index % NetConstants.MultiChannelCount];
+            return null;
+            //if (NetConstants.MultiChannelSize == 0)
+            //    return _reliableSequencedChannels[0];
+            //return _reliableSequencedChannels[index % NetConstants.MultiChannelCount];
         }
 
         private NetPeer(NetManager netManager, NetEndPoint remoteEndPoint)
@@ -228,20 +232,28 @@ namespace LiteNetLib
             _pingSendTimer = 0;
             _pingMustSend = false;
 
-            _reliableOrderedChannels = new ReliableChannel[NetConstants.MultiChannelCount];
-            _reliableUnorderedChannels = new ReliableChannel[NetConstants.MultiChannelCount];
-            _sequencedChannels = new SequencedChannel[NetConstants.MultiChannelCount];
-            _simpleChannels = new SimpleChannel[NetConstants.MultiChannelCount];
-            _reliableSequencedChannels = new ReliableSequencedChannel[NetConstants.MultiChannelCount];
+            if (NetManager.EnableReliableOrderedChannel)
+                _reliableOrderedChannels = new ReliableChannel[NetConstants.MultiChannelCount];
+            if (NetManager.EnableReliableUnorderedChannel)
+                _reliableUnorderedChannels = new ReliableChannel[NetConstants.MultiChannelCount];
+            if (NetManager.EnableSequencedChannel)
+                _sequencedChannels = new SequencedChannel[NetConstants.MultiChannelCount];
+            if (NetManager.EnableSimpleChannel)
+                _simpleChannels = new SimpleChannel[NetConstants.MultiChannelCount];
+            //_reliableSequencedChannels = new ReliableSequencedChannel[NetConstants.MultiChannelCount];
             
             // Initialise default channel
             for(int i = 0; i < NetConstants.MultiChannelCount; ++i)
             {
-                _reliableOrderedChannels[i] = new ReliableChannel(this, true, i);
-                _reliableUnorderedChannels[i] = new ReliableChannel(this, false, i);
-                _sequencedChannels[i] = new SequencedChannel(this, i);
-                _simpleChannels[i] = new SimpleChannel(this, i);
-                _reliableSequencedChannels[i] = new ReliableSequencedChannel(this, i);
+                if (NetManager.EnableReliableOrderedChannel)
+                    _reliableOrderedChannels[i] = new ReliableChannel(this, true, i);
+                if (NetManager.EnableReliableUnorderedChannel)
+                    _reliableUnorderedChannels[i] = new ReliableChannel(this, false, i);
+                if (NetManager.EnableSequencedChannel)
+                    _sequencedChannels[i] = new SequencedChannel(this, i);
+                if (NetManager.EnableSimpleChannel)
+                    _simpleChannels[i] = new SimpleChannel(this, i);
+                //_reliableSequencedChannels[i] = new ReliableSequencedChannel(this, i);
             }
 
             _holdedFragments = new Dictionary<ushort, IncomingFragments>();
@@ -531,19 +543,23 @@ namespace LiteNetLib
             switch (packet.Property)
             {
                 case PacketProperty.ReliableUnordered:
-                    getReliableUnorderedChannel(packet.Channel).AddToQueue(packet);
+                    if(NetManager.EnableReliableUnorderedChannel)
+                        getReliableUnorderedChannel(packet.Channel).AddToQueue(packet);
                     break;
                 case PacketProperty.Sequenced:
-                    getSequencedChannel(packet.Channel).AddToQueue(packet);
+                    if (NetManager.EnableSequencedChannel)
+                        getSequencedChannel(packet.Channel).AddToQueue(packet);
                     break;
                 case PacketProperty.ReliableOrdered:
-                    getReliableOrderedChannel(packet.Channel).AddToQueue(packet);
+                    if (NetManager.EnableReliableOrderedChannel)
+                        getReliableOrderedChannel(packet.Channel).AddToQueue(packet);
                     break;
                 case PacketProperty.Unreliable:
-                    getSimpleChannel(packet.Channel).AddToQueue(packet);
+                    if (NetManager.EnableSimpleChannel)
+                        getSimpleChannel(packet.Channel).AddToQueue(packet);
                     break;
                 case PacketProperty.ReliableSequenced:
-                    getReliableSequencedChannel(packet.Channel).AddToQueue(packet);
+                    //getReliableSequencedChannel(packet.Channel).AddToQueue(packet);
                     break;
 
                 case PacketProperty.MtuCheck:
@@ -901,19 +917,27 @@ namespace LiteNetLib
         {
             if (NetConstants.MultiChannelSize == 0)
             {
-                _reliableOrderedChannels[0]?.SendNextPackets();
-                _reliableUnorderedChannels[0]?.SendNextPackets();
-                _reliableSequencedChannels[0]?.SendNextPackets();
-                _sequencedChannels[0]?.SendNextPackets();
-                _simpleChannels[0]?.SendNextPackets();
+                if(NetManager.EnableReliableOrderedChannel)
+                    _reliableOrderedChannels[0].SendNextPackets();
+                if (NetManager.EnableReliableUnorderedChannel)
+                    _reliableUnorderedChannels[0].SendNextPackets();
+                //_reliableSequencedChannels[0].SendNextPackets();
+                if (NetManager.EnableSequencedChannel)
+                    _sequencedChannels[0].SendNextPackets();
+                if (NetManager.EnableSimpleChannel)
+                    _simpleChannels[0].SendNextPackets();
             }
             else
             {
-                foreach (var channel in _reliableOrderedChannels) channel?.SendNextPackets();
-                foreach (var channel in _reliableUnorderedChannels) channel?.SendNextPackets();
-                foreach (var channel in _reliableSequencedChannels) channel?.SendNextPackets();
-                foreach (var channel in _sequencedChannels) channel?.SendNextPackets();
-                foreach (var channel in _simpleChannels) channel?.SendNextPackets();
+                if (NetManager.EnableReliableOrderedChannel)
+                    foreach (var channel in _reliableOrderedChannels) channel?.SendNextPackets();
+                if (NetManager.EnableReliableUnorderedChannel)
+                    foreach (var channel in _reliableUnorderedChannels) channel?.SendNextPackets();
+                if (NetManager.EnableSequencedChannel)
+                    foreach (var channel in _sequencedChannels) channel?.SendNextPackets();
+                if (NetManager.EnableSimpleChannel)
+                    foreach (var channel in _simpleChannels) channel?.SendNextPackets();
+                //foreach (var channel in _reliableSequencedChannels) channel?.SendNextPackets();
             }
 
             FlushMergePacket();

@@ -197,10 +197,33 @@ namespace LiteNetLib
             get { return _socket.LocalPort; }
         }
 
+        /// <summary>
+        /// Number of connections
+        /// </summary>
         public int PeersCount
         {
             get { return _peers.Count; }
         }
+
+        /// <summary>
+        /// Activate Reliable Ordered channel
+        /// </summary>
+        public bool EnableReliableOrderedChannel = true;
+
+        /// <summary>
+        /// Activate Reliable Unordered channel
+        /// </summary>
+        public bool EnableReliableUnorderedChannel = false;
+
+        /// <summary>
+        /// Activate Sequenced channel
+        /// </summary>
+        public bool EnableSequencedChannel = true;
+
+        /// <summary>
+        /// Activate Simple channel
+        /// </summary>
+        public bool EnableSimpleChannel = false;
 
         /// <summary>
         /// NetManager constructor with maxConnections = 1 (usable for client)
