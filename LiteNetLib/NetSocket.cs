@@ -36,6 +36,17 @@ namespace LiteNetLib
             _onMessageReceived = onMessageReceived;
         }
 
+        public bool ReadAvailable = false;
+
+        public int WaitCondition(int timeout)
+        {
+            int result = 0;
+            if (_udpSocketv4 != null && _udpSocketv4.Poll(timeout * 1000, SelectMode.SelectRead))
+                result = 1;
+            ReadAvailable = result != 0;
+            return result;
+        }
+
         public void Receive(bool ipV6, byte[] receiveBuffer)
         {
             Socket socket;
@@ -58,7 +69,7 @@ namespace LiteNetLib
 
             while (true)
             {
-                if (socket == null || socket.Available < 1)
+                if (socket == null || ReadAvailable == false || socket.Available < 1)
                     return;
 
                 //Reading data

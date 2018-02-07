@@ -57,7 +57,7 @@ namespace LiteNetLib
 #endif
 
         private readonly NetSocket _socket;
-        private readonly Thread _logicThread;
+        //private readonly Thread _logicThread;
 
         private readonly SwitchQueue<NetEvent> _netEventsQueue;
         private readonly Stack<NetEvent> _netEventsPool;
@@ -127,7 +127,7 @@ namespace LiteNetLib
         /// <summary>
         /// Experimental feature. Events automatically will be called without PollEvents method from another thread
         /// </summary>
-        public bool UnsyncedEvents = false;
+        public bool UnsyncedEvents = true;
 
         /// <summary>
         /// Allows receive DiscoveryRequests
@@ -137,7 +137,7 @@ namespace LiteNetLib
         /// <summary>
         /// Merge small packets into one before sending to reduce outgoing packets count. (May increase a bit outgoing data size)
         /// </summary>
-        public bool MergeEnabled = false;
+        public bool MergeEnabled = true;
 
         /// <summary>
         /// Delay betwen initial connection attempts
@@ -251,7 +251,7 @@ namespace LiteNetLib
         /// <param name="maxConnections">Maximum connections (incoming and outcoming)</param>
         public NetManager(INetEventListener listener, int maxConnections)
         {
-            _logicThread = new Thread(UpdateLogic) { Name = "LogicThread", IsBackground = true };
+            //_logicThread = new Thread(UpdateLogic) { Name = "LogicThread", IsBackground = true };
             _socket = new NetSocket(ReceiveLogic);
             _netEventListener = listener;
             _netEventsQueue = new SwitchQueue<NetEvent>();
@@ -450,13 +450,15 @@ namespace LiteNetLib
             }
         }
 
-        public int SkipCount;
+        NetPacket receiveBuffer;
 
         //Update function
         private void UpdateLogic()
         {
             long startNowMs = NetTime.NowMs;
-            NetPacket receiveBuffer = NetPacketPool.Get(PacketProperty.Sequenced, 0, NetConstants.MaxPacketSize);
+            long timeout = startNowMs + UpdateTime;
+            if (receiveBuffer == null)
+                receiveBuffer = NetPacketPool.Get(PacketProperty.Sequenced, 0, NetConstants.MaxPacketSize);
             while (IsRunning)
             {
 #if DEBUG
@@ -517,15 +519,22 @@ namespace LiteNetLib
 #if STATS_ENABLED
                 Statistics.PacketLoss = totalPacketLoss;
 #endif
-                Thread.Sleep(UpdateTime);
+                //Thread.Sleep(UpdateTime);
 
                 long currentNowMs = NetTime.NowMs;
                 long elapsedNowMs = currentNowMs - startNowMs;
+
                 startNowMs = currentNowMs;
                 AvgUpdateTime = (long)((elapsedNowMs * 6.0f + _updateTimeFilter[0] * 3.0f + _updateTimeFilter[1] * 2.0f + _updateTimeFilter[2] * 1.0f) / 12.0f);
                 _updateTimeFilter[2] = _updateTimeFilter[1];
                 _updateTimeFilter[1] = _updateTimeFilter[0];
                 _updateTimeFilter[0] = elapsedNowMs;
+
+                if (timeout <= currentNowMs)
+                    break;
+
+                if (_socket.WaitCondition((int)(timeout - currentNowMs)) == 0)
+                    break;
             }
         }
         
@@ -939,7 +948,7 @@ namespace LiteNetLib
             if (!_socket.Bind(ipv4, ipv6, port, ReuseAddress, EnableIPv4, EnableIPv6))
                 return false;
             IsRunning = true;
-            _logicThread.Start();
+            //_logicThread.Start();
             return true;
         }
 
@@ -957,7 +966,7 @@ namespace LiteNetLib
             if (!_socket.Bind(IPAddress.Any, IPAddress.IPv6Any, port, ReuseAddress, EnableIPv4, EnableIPv6))
                 return false;
             IsRunning = true;
-            _logicThread.Start();
+            //_logicThread.Start();
             return true;
         }
 
@@ -1058,6 +1067,7 @@ namespace LiteNetLib
         /// </summary>
         public void PollEvents()
         {
+            Run(15);
             if (UnsyncedEvents)
                 return;
             _netEventsQueue.Switch();
@@ -1065,6 +1075,12 @@ namespace LiteNetLib
             {
                 ProcessEvent(_netEventsQueue.Pop());
             }
+        }
+
+        public void Run(int timeout)
+        {
+            UpdateTime = timeout;
+            UpdateLogic();
         }
 
         /// <summary>
@@ -1163,10 +1179,10 @@ namespace LiteNetLib
             ClearPeers();
 
             //Stop
-            if (Thread.CurrentThread != _logicThread)
-            {
-                _logicThread.Join();
-            }
+            //if (Thread.CurrentThread != _logicThread)
+            //{
+            //    _logicThread.Join();
+            //}
             _socket.Close();
         }
 
