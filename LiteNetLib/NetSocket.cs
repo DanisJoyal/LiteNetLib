@@ -2,9 +2,16 @@ using System;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
+using System.Collections.Generic;
 
 namespace LiteNetLib
 {
+    internal class AsyncUserToken
+    {
+        public Socket Socket { get; set; }
+        public int id;
+    }
+
     internal sealed class NetSocket
     {
         private Socket _udpSocketv4;
@@ -14,6 +21,10 @@ namespace LiteNetLib
         private Socket _udpSocketv6;
         private EndPoint _bufferEndPointv6;
         private NetEndPoint _bufferNetEndPointv6;
+
+        Queue<byte[]> _sendBuffers;
+        Queue<SocketAsyncEventArgs> _es;
+        SocketAsyncEventArgs[] _er;
 
         private readonly NetManager.OnMessageReceived _onMessageReceived;
 
@@ -34,7 +45,25 @@ namespace LiteNetLib
         public NetSocket(NetManager.OnMessageReceived onMessageReceived)
         {
             _onMessageReceived = onMessageReceived;
+            _sendBuffers = new Queue<byte[]>();
+            _es = new Queue<SocketAsyncEventArgs>();
+            _er = new SocketAsyncEventArgs[2];
+
+            _er[0] = new SocketAsyncEventArgs();
+            _er[0].SetBuffer(new byte[NetConstants.MaxPacketSize], 0, NetConstants.MaxPacketSize);
+            _er[0].SocketFlags = SocketFlags.None;
+            _er[0].Completed += new EventHandler<SocketAsyncEventArgs>(ReceiveCompleted);
+            _er[0].UserToken = new AsyncUserToken();
+
+            _er[1] = new SocketAsyncEventArgs();
+            _er[1].SetBuffer(new byte[NetConstants.MaxPacketSize], 0, NetConstants.MaxPacketSize);
+            _er[1].SocketFlags = SocketFlags.None;
+            _er[1].Completed += new EventHandler<SocketAsyncEventArgs>(ReceiveCompleted);
+            _er[1].UserToken = new AsyncUserToken();
+
         }
+
+        internal bool hasStarted = false;
 
         public void Receive(bool ipV6, byte[] receiveBuffer)
         {
@@ -56,19 +85,49 @@ namespace LiteNetLib
                 bufferNetEndPoint = _bufferNetEndPointv4;
             }
 
-            while (true)
+            lock (dataReceived)
             {
-                if (socket == null || socket.Available < 1)
+                for (int i = 0; i < dataReceived.Count; ++i)
+                {
+                    _onMessageReceived(dataReceived[i], dataReceived[i].Length, 0, endPointReceived[i]);
+                }
+                dataReceived.Clear();
+                endPointReceived.Clear();
+            }
+
+            while (socket != null)
+            {
+                if (hasStarted)
                     return;
+
+                _er[1].RemoteEndPoint = _er[0].RemoteEndPoint = bufferEndPoint;
+                (_er[0].UserToken as AsyncUserToken).Socket = socket;
+                (_er[0].UserToken as AsyncUserToken).id = 0;
+                (_er[1].UserToken as AsyncUserToken).Socket = socket;
+                (_er[1].UserToken as AsyncUserToken).id = 1;
+
+                //if (socket == null || socket.Available < 1)
+                //    return;
 
                 //Reading data
                 try
                 {
-                    result = socket.ReceiveFrom(receiveBuffer, 0, receiveBuffer.Length, SocketFlags.None, ref bufferEndPoint);
-                    if (!bufferNetEndPoint.EndPoint.Equals(bufferEndPoint))
+                    if (socket.ReceiveFromAsync(_er[0]) == true)
                     {
-                        bufferNetEndPoint = new NetEndPoint((IPEndPoint)bufferEndPoint);
+                        hasStarted = true;
+                        return;
                     }
+                    //result = e.BytesTransferred;
+                    //if (!bufferNetEndPoint.EndPoint.Equals(e.RemoteEndPoint))
+                    //{
+                    //    bufferNetEndPoint = new NetEndPoint((IPEndPoint)e.RemoteEndPoint);
+                    //}
+
+                    //result = socket.ReceiveFrom(receiveBuffer, 0, receiveBuffer.Length, SocketFlags.None, ref bufferEndPoint);
+                    //if (!bufferNetEndPoint.EndPoint.Equals(bufferEndPoint))
+                    //{
+                    //    bufferNetEndPoint = new NetEndPoint((IPEndPoint)bufferEndPoint);
+                    //}
                 }
                 catch (SocketException ex)
                 {
@@ -89,13 +148,12 @@ namespace LiteNetLib
                     }
                     NetUtils.DebugWriteError("[R]Error code: {0} - {1}", (int)ex.SocketErrorCode, ex.ToString());
                     _onMessageReceived(null, 0, (int)ex.SocketErrorCode, bufferNetEndPoint);
-
                     return;
                 }
 
                 //All ok!
                 NetUtils.DebugWrite(ConsoleColor.Blue, "[R]Received data from {0}, result: {1}", bufferNetEndPoint.ToString(), result);
-                _onMessageReceived(receiveBuffer, result, 0, bufferNetEndPoint);
+                //_onMessageReceived(e.Buffer, e.BytesTransferred, 0, bufferNetEndPoint);
             }
         }
 
@@ -219,19 +277,87 @@ namespace LiteNetLib
             return true;
         }
 
+        public void SendCompleted(Object sender, SocketAsyncEventArgs e)
+        {
+            lock (_es) { _es.Enqueue(e); }
+        }
+
+        internal List<Byte[]> dataReceived = new List<Byte[]>();
+        internal List<NetEndPoint> endPointReceived = new List<NetEndPoint>();
+
+        public void ReceiveCompleted(Object sender, SocketAsyncEventArgs e)
+        {
+            if((e.UserToken as AsyncUserToken).id == 0)
+            {
+                _er[1].SetBuffer(0, NetConstants.MaxPacketSize);
+                _er[1].RemoteEndPoint = e.RemoteEndPoint;
+                (e.UserToken as AsyncUserToken).Socket.ReceiveFromAsync(_er[1]);
+            }
+            else if ((e.UserToken as AsyncUserToken).id == 1)
+            {
+                _er[0].SetBuffer(0, NetConstants.MaxPacketSize);
+                _er[0].RemoteEndPoint = e.RemoteEndPoint;
+                (e.UserToken as AsyncUserToken).Socket.ReceiveFromAsync(_er[0]);
+            }
+            if (e.BytesTransferred > 0 && e.SocketError == SocketError.Success)
+            {
+                Byte[] newData = new Byte[e.BytesTransferred];
+                Buffer.BlockCopy(e.Buffer, 0, newData, 0, e.BytesTransferred);
+
+                lock (dataReceived)
+                {
+                    dataReceived.Add(newData);
+                    endPointReceived.Add(new NetEndPoint((IPEndPoint)e.RemoteEndPoint));
+                }
+
+                //_onMessageReceived(e.Buffer, e.BytesTransferred, 0, new NetEndPoint((IPEndPoint)e.RemoteEndPoint));
+            }
+            else
+                NetUtils.DebugWriteError("[S][MCAST]" + e.SocketError.ToString());
+            //lock (_er) { _er.Enqueue(e); }
+        }
+
+        internal SocketAsyncEventArgs GetSocketAsyncEventArgs(bool send)
+        {
+            SocketAsyncEventArgs e = null;
+            if (_es.Count == 0)
+            {
+                e = new SocketAsyncEventArgs();
+                e.SetBuffer(new byte[NetConstants.MaxPacketSize], 0, NetConstants.MaxPacketSize);
+                e.SocketFlags = SocketFlags.None;
+                e.Completed += new EventHandler<SocketAsyncEventArgs>(SendCompleted);
+            }
+            else
+            {
+                lock (_es)
+                {
+                    e = _es.Dequeue();
+                }
+            }
+            return e;
+        }
+
         public int SendTo(byte[] data, int offset, int size, NetEndPoint remoteEndPoint, ref int errorCode)
         {
+            SocketAsyncEventArgs e = GetSocketAsyncEventArgs(true);
+            Buffer.BlockCopy(data, offset, e.Buffer, 0, size);
+            e.SetBuffer(0, size);
+            e.RemoteEndPoint = remoteEndPoint.EndPoint;
+
             try
             {
-                int result = 0;
-                if (_udpSocketv4 != null && remoteEndPoint.EndPoint.AddressFamily == AddressFamily.InterNetwork)
-                {
-                    result = _udpSocketv4.SendTo(data, offset, size, SocketFlags.None, remoteEndPoint.EndPoint);
-                }
-                else if(_udpSocketv6 != null)
-                {
-                    result = _udpSocketv6.SendTo(data, offset, size, SocketFlags.None, remoteEndPoint.EndPoint);
-                }
+                _udpSocketv4.SendToAsync(e);
+                int result = e.BytesTransferred;
+
+                //int result = 0;
+                //if (_udpSocketv4 != null && remoteEndPoint.EndPoint.AddressFamily == AddressFamily.InterNetwork)
+                //{
+                //    result = _udpSocketv4.SendTo(data, offset, size, SocketFlags.None, remoteEndPoint.EndPoint);
+                //}
+                //else if (_udpSocketv6 != null)
+                //{
+                //    result = _udpSocketv6.SendTo(data, offset, size, SocketFlags.None, remoteEndPoint.EndPoint);
+                //}
 
                 NetUtils.DebugWrite(ConsoleColor.Blue, "[S]Send packet to {0}, result: {1}", remoteEndPoint.EndPoint, result);
                 return result;
