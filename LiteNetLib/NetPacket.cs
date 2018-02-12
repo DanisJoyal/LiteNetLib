@@ -33,6 +33,11 @@ namespace LiteNetLib
         ReliableSequenced       //21
     }
 
+    internal interface INetPacketRecyle
+    {
+        void Recycle(NetPacket packet);
+    }
+
     internal sealed class NetPacket
     {
         private const int LastProperty = 22;
@@ -173,19 +178,20 @@ namespace LiteNetLib
             }
         }
 
-        private NetPacketPool _packetPool;
+        public bool DontRecycleNow = false;
+        private INetPacketRecyle _packetRecycle;
 
         public void Recycle()
         {
-            if (_packetPool != null)
-                _packetPool.Recycle(this);
+            if (_packetRecycle != null)
+                _packetRecycle.Recycle(this);
         }
 
-        public NetPacket(int size, NetPacketPool packetPool)
+        public NetPacket(int size, INetPacketRecyle packetPool)
         {
             RawData = new byte[size];  // Try to save realloc
             Size = size;
-            _packetPool = packetPool;
+            _packetRecycle = packetPool;
         }
 
         public bool Realloc(int toSize)

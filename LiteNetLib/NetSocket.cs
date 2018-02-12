@@ -52,7 +52,7 @@ namespace LiteNetLib
             Socket socket;
             EndPoint bufferEndPoint;
             NetEndPoint bufferNetEndPoint;
-            int result;
+            int result = 0;
 
             if (ipV6 == true)
             {
@@ -69,7 +69,7 @@ namespace LiteNetLib
 
             while (true)
             {
-                if (socket == null || ReadAvailable == false || socket.Available < 1)
+                if (socket == null || ReadAvailable == false || socket.Available == 0)
                     return;
 
                 //Reading data

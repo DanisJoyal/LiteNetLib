@@ -42,6 +42,7 @@
     <Reference Include="System" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="FastQueue.cs" />
     <Compile Include="INetEventListener.cs" />
     <Compile Include="NetDebug.cs" />
     <Compile Include="NetExceptions.cs" />

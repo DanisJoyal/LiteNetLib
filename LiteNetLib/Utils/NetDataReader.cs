@@ -80,7 +80,8 @@ namespace LiteNetLib.Utils
             //_data = packet.RawData;
             _position = 0;
             _dataSize = packet.GetDataSize();
-            _packet = packet; 
+            _packet = packet;
+            _packet.DontRecycleNow = true;
         }
 
         /// <summary>
@@ -502,7 +503,10 @@ namespace LiteNetLib.Utils
             _dataSize = 0;
             _data = null;
             if (_packet != null)
+            {
+                _packet.DontRecycleNow = false;
                 _packet.Recycle();
+            }
             _packet = null;
         }
     }

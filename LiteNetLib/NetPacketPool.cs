@@ -4,13 +4,19 @@ using LiteNetLib.Utils;
 
 namespace LiteNetLib
 {
-    internal class NetPacketPool
+    internal class NetPacketPool : INetPacketRecyle
     {
-        private readonly Stack<NetPacket> _pool;
+        private readonly FastQueue<NetPacket> _pool;
+
+        public int MinimumSize = NetConstants.PossibleMtu[0];
+
+        public int newPacketCreated;
+        public int packetPooled;
+        public int packetGet;
 
         public NetPacketPool()
         {
-            _pool = new Stack<NetPacket>();
+            _pool = new FastQueue<NetPacket>(4096);
         }
 
         public NetPacket GetWithData(PacketProperty property, int channel, NetDataWriter writer)
@@ -32,18 +38,18 @@ namespace LiteNetLib
             NetPacket packet = null;
             if (size <= NetConstants.MaxPacketSize)
             {
-                lock (_pool)
+                while (_pool.Empty == false && packet == null)
                 {
-                    if (_pool.Count > 0)
-                    {
-                        packet = _pool.Pop();
-                    }
+                    packet = _pool.Dequeue();
                 }
             }
             if (packet == null)
             {
                 //allocate new packet
+                //packet = new NetPacket(size < MinimumSize ? MinimumSize : size, this);
                 packet = new NetPacket(size, this);
+                packet.Size = size;
+                newPacketCreated++;
             }
             else
             {
@@ -55,6 +61,8 @@ namespace LiteNetLib
                 }
                 packet.Size = size;
             }
+            packet.DontRecycleNow = false;
+            packetGet++;
             return packet;
         }
 
@@ -83,7 +91,7 @@ namespace LiteNetLib
 
         public void Recycle(NetPacket packet)
         {
-            if (packet.Size > NetConstants.MaxPacketSize + NetConstants.SequencedHeaderSize)
+            if (packet.Size > NetConstants.MaxPacketSize)
             {
                 //Dont pool big packets. Save memory
                 return;
@@ -91,9 +99,11 @@ namespace LiteNetLib
 
             //Clean fragmented flag
             packet.IsFragmented = false;
-            lock (_pool)
+            if(packet.DontRecycleNow == false)
             {
-                _pool.Push(packet);
+                packet.DontRecycleNow = true;
+                _pool.Enqueue(packet);
+                packetPooled++;
             }
         }
     }
