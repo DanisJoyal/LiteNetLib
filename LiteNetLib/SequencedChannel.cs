@@ -12,7 +12,7 @@ namespace LiteNetLib
 
         public SequencedChannel(NetPeer peer, int channel)
         {
-            _outgoingPackets = new FastQueue<NetPacket>(NetConstants.DefaultWindowSize * 2);
+            _outgoingPackets = new FastQueue<NetPacket>(NetConstants.DefaultWindowSize);
             _peer = peer;
             _channel = channel;
         }

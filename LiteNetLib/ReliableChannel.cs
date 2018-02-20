@@ -78,7 +78,7 @@ namespace LiteNetLib
 
             _localSequence = 0;
             _remoteSequence = 0;
-            _packetsToAcknowledge = new FastQueueTyped<ushort>(2 * _windowSize);
+            _packetsToAcknowledge = new FastQueueTyped<ushort>(_windowSize);
 
             _mustSendAcksStartTimer = -1;
         }

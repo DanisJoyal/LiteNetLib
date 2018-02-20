@@ -6,17 +6,36 @@ namespace LiteNetLib
 {
     internal class NetPacketPool : INetPacketRecyle
     {
-        private readonly FastQueue<NetPacket> _pool;
+        private readonly FastQueue<NetPacket>[] _pool;
 
         public int MinimumSize = NetConstants.PossibleMtu[0];
+        public int MaximumSize = NetConstants.PossibleMtu[0];
+        public int Subdivision = 2;
+        public int PoolLimit = NetConstants.PoolLimit;
 
         public int newPacketCreated;
         public int packetPooled;
         public int packetGet;
 
+        public bool FreePackets = false;
+
         public NetPacketPool()
         {
-            _pool = new FastQueue<NetPacket>(4096);
+            _pool = new FastQueue<NetPacket>[Subdivision];
+            for(int i = 0; i < Subdivision; ++i)
+            {
+                _pool[i] = new FastQueue<NetPacket>();
+            }
+        }
+
+        ~NetPacketPool()
+        {
+            FreePackets = true;
+        }
+
+        public bool Dispose()
+        {
+            return FreePackets;
         }
 
         public NetPacket GetWithData(PacketProperty property, int channel, NetDataWriter writer)
@@ -38,9 +57,12 @@ namespace LiteNetLib
             NetPacket packet = null;
             if (size <= NetConstants.MaxPacketSize)
             {
-                while (_pool.Empty == false && packet == null)
+                int section = size * Subdivision / MaximumSize;
+                if (section >= _pool.Length)
+                    section = _pool.Length - 1;
+                while (_pool[section].Empty == false)
                 {
-                    packet = _pool.Dequeue();
+                    packet = _pool[section].Dequeue();
                 }
             }
             if (packet == null)
@@ -91,7 +113,7 @@ namespace LiteNetLib
 
         public void Recycle(NetPacket packet)
         {
-            if (packet.Size > NetConstants.MaxPacketSize)
+            if (packet.Size > NetConstants.MaxPacketSize) 
             {
                 //Dont pool big packets. Save memory
                 return;
@@ -102,8 +124,14 @@ namespace LiteNetLib
             if(packet.DontRecycleNow == false)
             {
                 packet.DontRecycleNow = true;
-                _pool.Enqueue(packet);
-                packetPooled++;
+                int section = packet.RawData.Length * Subdivision / MaximumSize;
+                if (section >= _pool.Length)
+                    section = _pool.Length - 1;
+                if (_pool[section].Count < PoolLimit)
+                {
+                    _pool[section].Enqueue(packet);
+                    packetPooled++;
+                }
             }
         }
     }

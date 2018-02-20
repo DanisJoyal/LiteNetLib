@@ -265,6 +265,7 @@ namespace LiteNetLib
             _updateTimeFilter = new long[3];
 
             // Precreate all needed Merge Packets
+            NetPacketPool.PoolLimit = maxConnections * 50;
             for (int i = 0; i < maxConnections * 3; ++i)
             {
                 NetPacket p = NetPacketPool.Get(PacketProperty.Sequenced, 0, (MtuStartIdx >= 0 && MtuStartIdx < NetConstants.PossibleMtu.Length ? NetConstants.PossibleMtu[MtuStartIdx] : (NetConstants.MaxPacketSize - NetConstants.FragmentHeaderSize)));

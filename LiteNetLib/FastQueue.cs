@@ -1,5 +1,5 @@
 using System;
-using System.Collections;
+using System.Collections.Generic;
 
 namespace LiteNetLib
 {
@@ -13,41 +13,78 @@ namespace LiteNetLib
             public int id;
 #endif
         }
-        Node[]  _nodes;
-        Node    _head;
-        Node    _tail;
+        List<Node[]>    _nodes;
+        Node            _head;
+        Node            _tail;
+        int             _growFactor; // 100 == 1.0, 130 == 1.3, 200 == 2.0
+        int             _length;
+        int             _size;
+        const int       _MinimumGrow = 8;
 
         // Need to set the capacity
-        FastQueue()
-        { }
+        public FastQueue() : this(32, (float)2.0)
+        {
+        }
+
+        public FastQueue(int capacity) : this(capacity, (float)2.0)
+        {
+        }
+
+        public FastQueue(int capacity, float growFactor)
+        {
+            if (capacity < 0)
+                throw new ArgumentOutOfRangeException("capacity", "FastQueue: Capacity must be greater than 0.");
+            if (!(growFactor >= 1.0 && growFactor <= 10.0))
+                throw new ArgumentOutOfRangeException("growFactor", "FastQueue: growFactor must be set between 1.0f and 10.0f.");
+
+            _nodes = new List<Node[]>(4);
+            _growFactor = (int)((1.0f - growFactor) * 100);
+            AddNodeArray(capacity);
+            _head = _tail = _nodes[0][0];
+            _size = 0;
+        }
 
         ~FastQueue()
         { Clear(); }
 
-        public FastQueue(int capacity)
+        private Node[] AddNodeArray(int size)
         {
-            _nodes = new Node[capacity];
-            for (int i = 0; i < capacity; i++)
+            Node[] newNodes = new Node[size];
+            for (int i = 0; i < size; i++)
             {
-                _nodes[i] = new Node();
+                newNodes[i] = new Node();
 #if DEBUG
-                _nodes[i].id = i;
+                newNodes[i].id = i;
 #endif
+                if(i != 0)
+                    newNodes[i - 1].next = newNodes[i];
             }
-            for (int i = 0; i < capacity - 1; i++)
-            {
-                _nodes[i].next = _nodes[i + 1];
-            }
-            _nodes[capacity - 1].next = _nodes[0];    // Loop to beginning
-            _head = _tail = _nodes[0];
+            newNodes[size - 1].next = newNodes[0];    // Loop to beginning
+            _length += size;
+            _nodes.Add(newNodes);
+            return newNodes;
         }
+
+        public int Count { get { return _size; } }
 
         public void Enqueue(T value)
         {
-            if (value != null && _head.next != _tail)
+            if (value != null)
             {
+                if (_head.next == _tail)
+                {
+                    // Queue is full
+                    int newCapacity = (_length * _growFactor) / 100;
+                    if (newCapacity < _MinimumGrow)
+                        newCapacity = _MinimumGrow;
+                    Node[] createNodes = AddNodeArray(newCapacity);
+                    createNodes[createNodes.Length - 1].next = _tail;
+                    _head.next = createNodes[0];
+                }
+
                 _head.value = value;
                 _head = _head.next;
+                _size++;
             }
         }
         public T Dequeue()
@@ -57,9 +94,21 @@ namespace LiteNetLib
                 T value = _tail.value;
                 _tail.value = null;         // Release the reference, otherwise it leaks
                 _tail = _tail.next;
+                --_size;
                 return value;
             }
             return null;
+        }
+
+        public void Resize()
+        {
+            if(Empty == true && _nodes.Count > 1)
+            {
+                _nodes.RemoveRange(1, _nodes.Count - 1);
+                _length = _nodes[0].Length;
+                _head = _tail = _nodes[0][0];
+                _size = 0;
+            }
         }
 
         public bool Empty { 
@@ -70,6 +119,7 @@ namespace LiteNetLib
         {
             while (Empty == false)
                 Dequeue();
+            _size = 0;
         }
     }
 
@@ -83,39 +133,76 @@ namespace LiteNetLib
             public int id;
 #endif
         }
-        Node[] _nodes;
+        List<Node[]> _nodes;
         Node _head;
         Node _tail;
+        int _growFactor; // 100 == 1.0, 130 == 1.3, 200 == 2.0
+        int _length;
+        int _size;
+        const int _MinimumGrow = 8;
 
         // Need to set the capacity
-        FastQueueTyped()
-        { }
-
-        public FastQueueTyped(int capacity)
+        public FastQueueTyped() : this(32, (float)2.0)
         {
-            _nodes = new Node[capacity];
-            for (int i = 0; i < capacity; i++)
-            {
-                _nodes[i] = new Node();
-#if DEBUG
-                _nodes[i].id = i;
-#endif
-            }
-            for (int i = 0; i < capacity - 1; i++)
-            {
-                _nodes[i].next = _nodes[i + 1];
-            }
-            _nodes[capacity - 1].next = _nodes[0];    // Loop to beginning
-            _head = _tail = _nodes[0];
         }
+
+        public FastQueueTyped(int capacity) : this(capacity, (float)2.0)
+        {
+        }
+
+        public FastQueueTyped(int capacity, float growFactor)
+        {
+            if (capacity < 0)
+                throw new ArgumentOutOfRangeException("capacity", "FastQueue: Capacity must be greater than 0.");
+            if (!(growFactor >= 1.0 && growFactor <= 10.0))
+                throw new ArgumentOutOfRangeException("growFactor", "FastQueue: growFactor must be set between 1.0f and 10.0f.");
+
+            _nodes = new List<Node[]>(4);
+            _growFactor = (int)((1.0f - growFactor) * 100);
+            AddNodeArray(capacity);
+            _head = _tail = _nodes[0][0];
+            _size = 0;
+        }
+
+        ~FastQueueTyped()
+        { Clear(); }
+
+        private Node[] AddNodeArray(int size)
+        {
+            Node[] newNodes = new Node[size];
+            for (int i = 0; i < size; i++)
+            {
+                newNodes[i] = new Node();
+#if DEBUG
+                newNodes[i].id = i;
+#endif
+                if (i != 0)
+                    newNodes[i - 1].next = newNodes[i];
+            }
+            newNodes[size - 1].next = newNodes[0];    // Loop to beginning
+            _length += size;
+            _nodes.Add(newNodes);
+            return newNodes;
+        }
+
+        public int Count { get { return _size; } }
 
         public void Enqueue(T value)
         {
-            if (_head.next != _tail)
+            if (_head.next == _tail)
             {
-                _head.value = value;
-                _head = _head.next;
+                // Queue is full
+                int newCapacity = (_length * _growFactor) / 100;
+                if (newCapacity < _MinimumGrow)
+                    newCapacity = _MinimumGrow;
+                Node[] createNodes = AddNodeArray(newCapacity);
+                createNodes[createNodes.Length - 1].next = _tail;
+                _head.next = createNodes[0];
             }
+
+            _head.value = value;
+            _head = _head.next;
+            _size++;
         }
         public T Dequeue()
         {
@@ -123,9 +210,21 @@ namespace LiteNetLib
             {
                 T value = _tail.value;
                 _tail = _tail.next;
+                --_size;
                 return value;
             }
             return default(T);
+        }
+
+        public void Resize()
+        {
+            if (Empty == true && _nodes.Count > 1)
+            {
+                _nodes.RemoveRange(1, _nodes.Count - 1);
+                _length = _nodes[0].Length;
+                _head = _tail = _nodes[0][0];
+                _size = 0;
+            }
         }
 
         public bool Empty
@@ -136,6 +235,7 @@ namespace LiteNetLib
         public void Clear()
         {
             _tail = _head;
+            _size = 0;
         }
     }
 }

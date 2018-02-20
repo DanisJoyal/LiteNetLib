@@ -36,6 +36,7 @@ namespace LiteNetLib
     internal interface INetPacketRecyle
     {
         void Recycle(NetPacket packet);
+        bool Dispose();
     }
 
     internal sealed class NetPacket
@@ -183,8 +184,8 @@ namespace LiteNetLib
 
         public void Recycle()
         {
-            if (_packetRecycle != null)
-                _packetRecycle.Recycle(this);
+            //if (_packetRecycle != null)
+            //    _packetRecycle.Recycle(this);
         }
 
         public NetPacket(int size, INetPacketRecyle packetPool)
@@ -202,6 +203,12 @@ namespace LiteNetLib
                 return true;
             }
             return false;
+        }
+
+        ~NetPacket()
+        {
+            if(_packetRecycle != null && _packetRecycle.Dispose() == false)
+                _packetRecycle.Recycle(this);
         }
 
         public static int GetHeaderSize(PacketProperty property)
