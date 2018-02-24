@@ -756,12 +756,11 @@ namespace LiteNetLib
                         NetPacket mergedPacket = _packetPool.GetAndRead(packet.RawData, pos, size);
                         if (mergedPacket == null)
                         {
-                            packet.Recycle();
                             break;
                         }
                         pos += size;
                         ProcessPacket(mergedPacket);
-                        packet.Recycle();
+                        mergedPacket.Recycle();
                     }
                     break;
                 //If we get ping, send pong
@@ -888,9 +887,8 @@ namespace LiteNetLib
                     if (_mergeCount > 0)
                     {
                         NetUtils.DebugWrite("Send merged: " + _mergePos + ", count: " + _mergeCount);
-                        _mergeData.Size = NetConstants.HeaderSize + _mergePos;
+                        _mergeData.Size = NetPacket.GetHeaderSize(PacketProperty.Merged) + _mergePos;
                         _mergeData.Property = PacketProperty.Merged;
-                        _mergeData.Prepare();
                         _netManager.SendRawAndRecycle(_mergeData, _remoteEndPoint);
                     }
 #if STATS_ENABLED

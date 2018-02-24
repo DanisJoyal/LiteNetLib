@@ -64,8 +64,11 @@ namespace LiteNetLib
             get { return _cachedProperty; }
             set
             {
-                _cachedProperty = value;
-                _cachedDataSize = _size - GetHeaderSize();
+                if (_cachedProperty != value)
+                {
+                    _cachedProperty = value;
+                    _cachedDataSize = _size - GetHeaderSize();
+                }
             }
         }
 
@@ -94,8 +97,11 @@ namespace LiteNetLib
             get { return _cachedIsFragmented; }
             set
             {
-                _cachedIsFragmented = value;
-                _cachedDataSize = _size - GetHeaderSize();
+                if (_cachedIsFragmented != value)
+                {
+                    _cachedIsFragmented = value;
+                    _cachedDataSize = _size - GetHeaderSize();
+                }
             }
         }
 
@@ -184,8 +190,8 @@ namespace LiteNetLib
 
         public void Recycle()
         {
-            //if (_packetRecycle != null)
-            //    _packetRecycle.Recycle(this);
+            if (_packetRecycle != null)
+                _packetRecycle.Recycle(this);
         }
 
         public NetPacket(int size, INetPacketRecyle packetPool)
