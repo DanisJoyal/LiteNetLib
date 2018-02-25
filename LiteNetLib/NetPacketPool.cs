@@ -33,9 +33,12 @@ namespace LiteNetLib
             FreePackets = true;
         }
 
-        public bool Dispose()
+        public bool Dispose(int size)
         {
-            return FreePackets;
+            int section = size * Subdivision / MaximumSize;
+            if (section >= _pool.Length)
+                section = _pool.Length - 1;
+            return FreePackets || _pool[section].Count >= PoolLimit;
         }
 
         public NetPacket GetWithData(PacketProperty property, int channel, NetDataWriter writer)
@@ -60,7 +63,7 @@ namespace LiteNetLib
                 int section = size * Subdivision / MaximumSize;
                 if (section >= _pool.Length)
                     section = _pool.Length - 1;
-                while (_pool[section].Empty == false)
+                while (packet == null && _pool[section].Empty == false)
                 {
                     packet = _pool[section].Dequeue();
                 }
@@ -111,6 +114,32 @@ namespace LiteNetLib
             return packet;
         }
 
+        public void Prepool(int nbPackets, int size)
+        {
+            if (size > NetConstants.MaxPacketSize)
+            {
+                //Dont pool big packets. Save memory
+                return;
+            }
+
+            for (int i = 0; i < nbPackets; ++i)
+            {
+                //allocate new packet
+                NetPacket packet = new NetPacket(size, this);
+                packet.Size = size;
+
+                int section = packet.RawData.Length * Subdivision / MaximumSize;
+                if (section >= _pool.Length)
+                    section = _pool.Length - 1;
+                if (_pool[section].Count < PoolLimit)
+                {
+                    packet.DontRecycleNow = true;
+                    _pool[section].Enqueue(packet);
+                    packetPooled++;
+                }
+            }
+        }
+
         public void Recycle(NetPacket packet)
         {
             if (packet.Size > NetConstants.MaxPacketSize) 
@@ -123,12 +152,12 @@ namespace LiteNetLib
             packet.IsFragmented = false;
             if(packet.DontRecycleNow == false)
             {
-                packet.DontRecycleNow = true;
                 int section = packet.RawData.Length * Subdivision / MaximumSize;
                 if (section >= _pool.Length)
                     section = _pool.Length - 1;
                 if (_pool[section].Count < PoolLimit)
                 {
+                    packet.DontRecycleNow = true;
                     _pool[section].Enqueue(packet);
                     packetPooled++;
                 }

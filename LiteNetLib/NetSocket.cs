@@ -2,6 +2,7 @@ using System;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
+using System.Collections.Generic;
 
 namespace LiteNetLib
 {
@@ -36,17 +37,6 @@ namespace LiteNetLib
             _onMessageReceived = onMessageReceived;
         }
 
-        public bool ReadAvailable = false;
-
-        public int WaitCondition(int timeout)
-        {
-            int result = 0;
-            if (_udpSocketv4 != null && _udpSocketv4.Poll(timeout * 1000, SelectMode.SelectRead))
-                result = 1;
-            ReadAvailable = result != 0;
-            return result;
-        }
-
         public void Receive(bool ipV6, byte[] receiveBuffer)
         {
             Socket socket;
@@ -67,19 +57,33 @@ namespace LiteNetLib
                 bufferNetEndPoint = _bufferNetEndPointv4;
             }
 
-            while (true)
+            int loopCount = 0;
+
+            while (socket != null && socket.Available != 0)
             {
-                if (socket == null || ReadAvailable == false || socket.Available == 0)
-                    return;
+                //if (socket == null || socket.Available == 0)
+                //    return;
 
                 //Reading data
                 try
                 {
+                    if (ipV6 == true)
+                    {
+                        bufferEndPoint = _bufferEndPointv6;
+                        bufferNetEndPoint = _bufferNetEndPointv6;
+                    }
+                    else
+                    {
+                        bufferEndPoint = _bufferEndPointv4;
+                        bufferNetEndPoint = _bufferNetEndPointv4;
+                    }
+
                     result = socket.ReceiveFrom(receiveBuffer, 0, receiveBuffer.Length, SocketFlags.None, ref bufferEndPoint);
                     if (!bufferNetEndPoint.EndPoint.Equals(bufferEndPoint))
                     {
                         bufferNetEndPoint = new NetEndPoint((IPEndPoint)bufferEndPoint);
                     }
+                    loopCount++;
                 }
                 catch (SocketException ex)
                 {
@@ -250,7 +254,8 @@ namespace LiteNetLib
             catch (SocketException ex)
             {
                 if (ex.SocketErrorCode == SocketError.Interrupted || 
-                    ex.SocketErrorCode == SocketError.NoBufferSpaceAvailable)
+                    ex.SocketErrorCode == SocketError.NoBufferSpaceAvailable ||
+                    ex.SocketErrorCode == SocketError.WouldBlock)
                 {
                     return 0;
                 }

@@ -266,11 +266,8 @@ namespace LiteNetLib
 
             // Precreate all needed Merge Packets
             NetPacketPool.PoolLimit = maxConnections * 50;
-            for (int i = 0; i < maxConnections * 3; ++i)
-            {
-                NetPacket p = NetPacketPool.Get(PacketProperty.Sequenced, 0, (MtuStartIdx >= 0 && MtuStartIdx < NetConstants.PossibleMtu.Length ? NetConstants.PossibleMtu[MtuStartIdx] : (NetConstants.MaxPacketSize - NetConstants.FragmentHeaderSize)));
-                p.Recycle();
-            }
+            NetPacketPool.Prepool(maxConnections * 5, MtuStartIdx >= 0 && MtuStartIdx < NetConstants.PossibleMtu.Length ? NetConstants.PossibleMtu[MtuStartIdx] : (NetConstants.MaxPacketSize - NetConstants.FragmentHeaderSize));
+            NetPacketPool.Prepool(maxConnections * 30, 32);
         }
 
         internal void ConnectionLatencyUpdated(NetPeer fromPeer, int latency)
@@ -291,8 +288,8 @@ namespace LiteNetLib
 
         internal bool SendRaw(byte[] message, int start, int length, NetEndPoint remoteEndPoint)
         {
-            if (!IsRunning)
-                return false;
+            //if (!IsRunning)
+            //    return false;
 
             int errorCode = 0;
             if (_socket.SendTo(message, start, length, remoteEndPoint, ref errorCode) <= 0)
@@ -460,7 +457,7 @@ namespace LiteNetLib
             long timeout = startNowMs + UpdateTime;
             if (receiveBuffer == null)
                 receiveBuffer = NetPacketPool.Get(PacketProperty.Sequenced, 0, NetConstants.MaxPacketSize);
-            while (IsRunning)
+            //while (true)
             {
 #if DEBUG
                 if (SimulateLatency)
@@ -514,28 +511,27 @@ namespace LiteNetLib
                     }
                 }
 
-                _socket.Receive(false, receiveBuffer.RawData);
-                _socket.Receive(true, receiveBuffer.RawData);
-
 #if STATS_ENABLED
                 Statistics.PacketLoss = totalPacketLoss;
 #endif
-                //Thread.Sleep(UpdateTime);
+                _socket.Receive(false, receiveBuffer.RawData);
+                _socket.Receive(true, receiveBuffer.RawData);
+
 
                 long currentNowMs = NetTime.NowMs;
-                long elapsedNowMs = currentNowMs - startNowMs;
 
+                int remainingTime = (int)(timeout - currentNowMs);
+                Thread.Sleep(remainingTime > 0 ? remainingTime : 0);
+
+                currentNowMs = NetTime.NowMs;
+                long elapsedNowMs = currentNowMs - startNowMs;
                 startNowMs = currentNowMs;
+
                 AvgUpdateTime = (long)((elapsedNowMs * 6.0f + _updateTimeFilter[0] * 3.0f + _updateTimeFilter[1] * 2.0f + _updateTimeFilter[2] * 1.0f) / 12.0f);
                 _updateTimeFilter[2] = _updateTimeFilter[1];
                 _updateTimeFilter[1] = _updateTimeFilter[0];
                 _updateTimeFilter[0] = elapsedNowMs;
-
-                if (timeout <= currentNowMs)
-                    break;
-
-                if (_socket.WaitCondition((int)(timeout - currentNowMs)) == 0)
-                    break;
+                //break;
             }
         }
         

@@ -608,7 +608,7 @@ namespace LiteNetLib
             }
             
             //recalc resend delay
-            _resendDelay = 25 + (long)((float)_avgRtt * 2.1); // 25 ms + double rtt
+            _resendDelay = (long)(_avgRtt * 2.7f); // double rtt
         }
 
         internal void AddIncomingPacket(NetPacket p)

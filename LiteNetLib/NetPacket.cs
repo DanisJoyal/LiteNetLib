@@ -36,7 +36,7 @@ namespace LiteNetLib
     internal interface INetPacketRecyle
     {
         void Recycle(NetPacket packet);
-        bool Dispose();
+        bool Dispose(int size);
     }
 
     internal sealed class NetPacket
@@ -213,7 +213,8 @@ namespace LiteNetLib
 
         ~NetPacket()
         {
-            if(_packetRecycle != null && _packetRecycle.Dispose() == false)
+            DontRecycleNow = false;
+            if(_packetRecycle != null && _packetRecycle.Dispose(Size) == false)
                 _packetRecycle.Recycle(this);
         }
 
