@@ -490,7 +490,7 @@ namespace LiteNetLib
                         NetPeer netPeer = _peers[i];
                         if (netPeer.ConnectionState == ConnectionState.Disconnected)
                         {
-                            _peers.Remove(netPeer);
+                            _peers.RemoveAt(i);
                         }
                     }
 

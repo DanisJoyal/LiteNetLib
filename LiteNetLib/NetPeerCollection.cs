@@ -5,6 +5,19 @@ namespace LiteNetLib
 {
     internal sealed class NetPeerCollection
     {
+        private class PeerComparer : IEqualityComparer<NetEndPoint>
+        {
+            public bool Equals(NetEndPoint x, NetEndPoint y)
+            {
+                return x.EndPoint.Equals(y.EndPoint);
+            }
+
+            public int GetHashCode(NetEndPoint obj)
+            {
+                return obj.GetHashCode();
+            }
+        }
+
         private readonly Dictionary<NetEndPoint, NetPeer> _peersDict;
         private readonly NetPeer[] _peersArray;
         public int Count;
@@ -17,7 +30,7 @@ namespace LiteNetLib
         public NetPeerCollection(int maxPeers)
         {
             _peersArray = new NetPeer[maxPeers];
-            _peersDict = new Dictionary<NetEndPoint, NetPeer>();
+            _peersDict = new Dictionary<NetEndPoint, NetPeer>(new PeerComparer());
         }
 
         public bool TryGetValue(NetEndPoint endPoint, out NetPeer peer)
@@ -29,16 +42,14 @@ namespace LiteNetLib
         {
             Array.Clear(_peersArray, 0, Count);
             _peersDict.Clear();
+            Count = 0;
         }
 
         public void Add(NetEndPoint endPoint, NetPeer peer)
         {
-            if (_peersDict.ContainsKey(endPoint) == false)
-            {
-                _peersDict.Add(endPoint, peer);
-                _peersArray[Count] = peer;
-                Count++;
-            }
+            _peersArray[Count] = peer;
+            _peersDict.Add(endPoint, peer);
+            Count++;
         }
 
         public bool ContainsAddress(NetEndPoint endPoint)
@@ -51,21 +62,6 @@ namespace LiteNetLib
             NetPeer[] result = new NetPeer[Count];
             Array.Copy(_peersArray, 0, result, 0, Count);
             return result;
-        }
-
-        public void Remove(NetPeer peer)
-        {
-            for (int idx = 0; idx < Count; idx++)
-            {
-                if (_peersArray[idx] == peer)
-                {
-                    _peersDict.Remove(_peersArray[idx].EndPoint);
-                    _peersArray[idx] = _peersArray[Count - 1];
-                    _peersArray[Count - 1] = null;
-                    Count--;
-                    break;
-                }
-            }
         }
 
         public void RemoveAt(int idx)

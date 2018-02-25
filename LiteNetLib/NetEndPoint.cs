@@ -15,10 +15,12 @@ namespace LiteNetLib
         public int Port { get { return EndPoint.Port; } }
 
         internal readonly IPEndPoint EndPoint;
+        private readonly int _hash;
 
         internal NetEndPoint(IPEndPoint ipEndPoint)
         {
             EndPoint = ipEndPoint;
+            _hash = EndPoint.GetHashCode();
         }
 
         public override bool Equals(object obj)
@@ -37,7 +39,7 @@ namespace LiteNetLib
 
         public override int GetHashCode()
         {
-            return EndPoint.GetHashCode();
+            return _hash;
         }
 
         /// <param name="hostStr">A valid host string that can be resolved by DNS or parsed as an IP address</param>
@@ -49,6 +51,7 @@ namespace LiteNetLib
         {
             IPAddress addr = GetFromString(hostStr);
             EndPoint = new IPEndPoint(addr, port);
+            _hash = EndPoint.GetHashCode();
         }
 
         internal static IPAddress GetFromString(string hostStr)
