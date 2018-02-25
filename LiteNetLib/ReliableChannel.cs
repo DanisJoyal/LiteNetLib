@@ -33,7 +33,7 @@ namespace LiteNetLib
         private readonly bool[] _earlyReceived;              //for unordered
         private PendingPacket _tailPendingPacket;
         private PendingPacket _headPendingPacket;
-        private readonly FastQueueTyped<ushort> _packetsToAcknowledge;
+        private readonly List<ushort> _packetsToAcknowledge;
         private ushort _packetsToAcknowledgeMin;
         private ushort _packetsToAcknowledgeMax;
 
@@ -73,7 +73,7 @@ namespace LiteNetLib
 
             _localSequence = 0;
             _remoteSequence = NetConstants.MaxSequence;
-            _packetsToAcknowledge = new FastQueueTyped<ushort>(NetConstants.DefaultWindowSize);
+            _packetsToAcknowledge = new List<ushort>(NetConstants.DefaultWindowSize * 2);
 
             _mustSendAcksStartTimer = -1;
         }
@@ -170,15 +170,14 @@ namespace LiteNetLib
                         Array.Clear(_outgoingAcks.RawData, 0, _outgoingAcks.Size - NetConstants.SequencedHeaderSize);
                         // Set bit to 1 foreach packet to ack
                         int ackIdx, ackByte, ackBit;
-                        while (_packetsToAcknowledge.Count > 0)
+                        foreach (ushort seq in _packetsToAcknowledge)
                         {
-                            ushort seq = _packetsToAcknowledge.Dequeue();
-
                             ackIdx = RelativeSequenceDiff(seq, _outgoingAcks.Sequence);
                             ackByte = ackIdx / BitsInByte;
                             ackBit = ackIdx % BitsInByte;
                             _outgoingAcks.RawData[ackByte] |= (byte)(1 << ackBit);
                         }
+                        _packetsToAcknowledge.Clear();
 
                         //Monitor.Enter(_outgoingAcks);
                         _peer.SendRawData(_outgoingAcks);
@@ -297,7 +296,7 @@ namespace LiteNetLib
                 if (_packetsToAcknowledgeMax < packet.Sequence)
                     _packetsToAcknowledgeMax = packet.Sequence;
             }
-            _packetsToAcknowledge.Enqueue(packet.Sequence);
+            _packetsToAcknowledge.Add(packet.Sequence);
 
             if(_remoteSequence == NetConstants.MaxSequence)
             {
